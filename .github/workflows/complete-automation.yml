@@ -1,0 +1,463 @@
+# =============================================================================
+# AI Video GPU - Complete Automation Workflow
+# CI/CD Pipeline with Build, Test, Security, Deploy, and Monitoring
+# =============================================================================
+
+name: AI Video GPU - Complete Automation Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ['v*']
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 2 * * 0'  # Weekly security scan
+  workflow_dispatch:
+    inputs:
+      deploy_environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      skip_tests:
+        description: 'Skip test execution'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+
+jobs:
+  # =============================================================================
+  # Code Quality and Security Analysis
+  # =============================================================================
+  code-quality:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort mypy bandit safety
+          pip install -r requirements-dev.txt
+
+      - name: Run linting
+        run: |
+          flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+
+      - name: Run code formatting check
+        run: |
+          black --check src/
+          isort --check-only src/
+
+      - name: Run type checking
+        run: mypy src/ --ignore-missing-imports
+
+      - name: Run security analysis
+        run: |
+          bandit -r src/ -f json -o bandit-report.json
+          safety check --json --output safety-report.json
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            safety-report.json
+
+  # =============================================================================
+  # Unit and Integration Tests
+  # =============================================================================
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_tests }}
+    strategy:
+      matrix:
+        test-type: [unit, integration, api]
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test_aivideo
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Set up test environment
+        run: |
+          export DATABASE_URL=postgresql://test:test@localhost:5432/test_aivideo
+          export REDIS_URL=redis://localhost:6379/0
+          python scripts/setup_test_db.py
+
+      - name: Run tests
+        run: |
+          case "${{ matrix.test-type }}" in
+            unit)
+              python -m pytest tests/unit/ -v --cov=src --cov-report=xml
+              ;;
+            integration)
+              python -m pytest tests/integration/ -v --cov=src --cov-report=xml
+              ;;
+            api)
+              python -m pytest tests/api/ -v --cov=src --cov-report=xml
+              ;;
+          esac
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: ${{ matrix.test-type }}
+
+  # =============================================================================
+  # GPU Testing (if GPU runners available)
+  # =============================================================================
+  gpu-test:
+    name: GPU Compatibility Test
+    runs-on: [self-hosted, gpu]
+    if: ${{ !inputs.skip_tests && contains(github.event.head_commit.message, '[gpu-test]') }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test GPU availability
+        run: |
+          nvidia-smi
+          python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+
+      - name: Run GPU-specific tests
+        run: |
+          python -m pytest tests/gpu/ -v --gpu-required
+
+  # =============================================================================
+  # Container Build and Security Scan
+  # =============================================================================
+  build-container:
+    name: Build and Scan Container
+    runs-on: ubuntu-latest
+    needs: [code-quality]
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push container
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.prebuilt
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.meta.outputs.tags }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run container structure test
+        run: |
+          curl -LO https://storage.googleapis.com/container-structure-test/latest/container-structure-test-linux-amd64
+          chmod +x container-structure-test-linux-amd64
+          ./container-structure-test-linux-amd64 test --image ${{ steps.meta.outputs.tags }} --config tests/container-structure-test.yaml
+
+  # =============================================================================
+  # Infrastructure as Code Validation
+  # =============================================================================
+  validate-infrastructure:
+    name: Validate Infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate Docker Compose
+        run: |
+          docker-compose -f docker-compose.prebuilt.yml config
+
+      - name: Validate Kubernetes manifests
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes/kubectl/master/pkg/kubectl/cmd/config/testdata/kubeconfig" > /tmp/kubeconfig
+          export KUBECONFIG=/tmp/kubeconfig
+          kubectl --dry-run=client apply -f k8s/
+
+      - name: Run Helm chart validation
+        if: github.ref == 'refs/heads/main'
+        run: |
+          helm lint helm/ai-video-gpu/
+          helm template ai-video-gpu helm/ai-video-gpu/ | kubectl --dry-run=client apply -f -
+
+  # =============================================================================
+  # Performance and Load Testing
+  # =============================================================================
+  performance-test:
+    name: Performance Testing
+    runs-on: ubuntu-latest
+    needs: [build-container]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up test environment
+        run: |
+          docker-compose -f docker-compose.prebuilt.yml up -d
+          sleep 60  # Wait for services to be ready
+
+      - name: Run load tests
+        run: |
+          pip install locust
+          locust -f tests/performance/locustfile.py --host=http://localhost:8000 --users=10 --spawn-rate=2 --run-time=5m --html=performance-report.html
+
+      - name: Upload performance report
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-report
+          path: performance-report.html
+
+      - name: Cleanup
+        run: docker-compose -f docker-compose.prebuilt.yml down -v
+
+  # =============================================================================
+  # Deploy to Staging
+  # =============================================================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [test, build-container, validate-infrastructure]
+    if: github.ref == 'refs/heads/develop' || inputs.deploy_environment == 'staging'
+    environment:
+      name: staging
+      url: https://staging.aivideo.example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        run: |
+          # Deploy using your preferred method (Kubernetes, Docker Swarm, etc.)
+          echo "Deploying to staging environment..."
+          # kubectl apply -f k8s/ --namespace=staging
+          # docker stack deploy -c docker-compose.prebuilt.yml ai-video-gpu-staging
+
+      - name: Run smoke tests
+        run: |
+          sleep 30
+          curl -f https://staging.aivideo.example.com/health
+          python tests/smoke/test_staging.py
+
+      - name: Notify deployment
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#deployments'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  # =============================================================================
+  # Deploy to Production
+  # =============================================================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, performance-test]
+    if: github.ref_type == 'tag' || inputs.deploy_environment == 'production'
+    environment:
+      name: production
+      url: https://aivideo.example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create deployment
+        run: |
+          echo "Deploying to production environment..."
+          # Blue-green deployment
+          # kubectl apply -f k8s/ --namespace=production
+          # kubectl rollout status deployment/ai-video-gpu --namespace=production
+
+      - name: Run production smoke tests
+        run: |
+          sleep 60
+          curl -f https://aivideo.example.com/health
+          python tests/smoke/test_production.py
+
+      - name: Update monitoring
+        run: |
+          # Update monitoring dashboards and alerts
+          curl -X POST "https://grafana.example.com/api/dashboards/db" \
+            -H "Authorization: Bearer ${{ secrets.GRAFANA_TOKEN }}" \
+            -d @monitoring/production-dashboard.json
+
+      - name: Notify production deployment
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#production'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+  # =============================================================================
+  # Post-deployment Monitoring
+  # =============================================================================
+  monitor-deployment:
+    name: Monitor Deployment
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: always() && (github.ref_type == 'tag' || inputs.deploy_environment == 'production')
+    steps:
+      - name: Monitor application health
+        run: |
+          for i in {1..10}; do
+            if curl -f https://aivideo.example.com/health; then
+              echo "Health check $i: OK"
+            else
+              echo "Health check $i: FAILED"
+              exit 1
+            fi
+            sleep 30
+          done
+
+      - name: Check performance metrics
+        run: |
+          # Query Prometheus for key metrics
+          python scripts/check_production_metrics.py
+
+      - name: Update status page
+        run: |
+          # Update external status page
+          curl -X POST "https://api.statuspage.io/v1/pages/${{ secrets.STATUS_PAGE_ID }}/incidents" \
+            -H "Authorization: OAuth ${{ secrets.STATUS_PAGE_TOKEN }}" \
+            -d "name=Deployment Complete&status=resolved"
+
+  # =============================================================================
+  # Cleanup and Notifications
+  # =============================================================================
+  cleanup:
+    name: Cleanup and Notify
+    runs-on: ubuntu-latest
+    needs: [deploy-production, monitor-deployment]
+    if: always()
+    steps:
+      - name: Clean up old images
+        run: |
+          # Clean up old container images
+          echo "Cleaning up old images..."
+
+      - name: Generate deployment report
+        run: |
+          echo "# Deployment Report" > deployment-report.md
+          echo "- **Version**: ${{ github.ref_name }}" >> deployment-report.md
+          echo "- **Commit**: ${{ github.sha }}" >> deployment-report.md
+          echo "- **Status**: ${{ job.status }}" >> deployment-report.md
+          echo "- **Environment**: Production" >> deployment-report.md
+
+      - name: Send final notification
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#general'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+          text: |
+            🚀 AI Video GPU deployment completed!
+            Version: ${{ github.ref_name }}
+            Status: ${{ job.status }}

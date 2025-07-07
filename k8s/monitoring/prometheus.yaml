@@ -1,0 +1,254 @@
+# Prometheus Configuration for AI Video GPU Monitoring
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: ai-video-gpu
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    
+    rule_files:
+      - "ai_video_gpu_rules.yml"
+    
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+              - alertmanager:9093
+    
+    scrape_configs:
+      # AI Video GPU application metrics
+      - job_name: 'ai-video-gpu'
+        static_configs:
+          - targets: ['ai-video-gpu-service:8000']
+        scrape_interval: 10s
+        metrics_path: '/metrics'
+      
+      # GPU metrics from DCGM exporter
+      - job_name: 'dcgm-exporter'
+        static_configs:
+          - targets: ['dcgm-exporter:9400']
+        scrape_interval: 5s
+      
+      # Redis metrics
+      - job_name: 'redis'
+        static_configs:
+          - targets: ['redis-exporter:9121']
+      
+      # PostgreSQL metrics
+      - job_name: 'postgres'
+        static_configs:
+          - targets: ['postgres-exporter:9187']
+      
+      # Kubernetes metrics
+      - job_name: 'kubernetes-apiservers'
+        kubernetes_sd_configs:
+        - role: endpoints
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+        - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+          action: keep
+          regex: default;kubernetes;https
+      
+      # Node exporter
+      - job_name: 'kubernetes-nodes'
+        kubernetes_sd_configs:
+        - role: node
+        relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+        - target_label: __address__
+          replacement: kubernetes.default.svc:443
+        - source_labels: [__meta_kubernetes_node_name]
+          regex: (.+)
+          target_label: __metrics_path__
+          replacement: /api/v1/nodes/${1}/proxy/metrics
+
+  ai_video_gpu_rules.yml: |
+    groups:
+    - name: ai_video_gpu_alerts
+      rules:
+      - alert: HighGPUUtilization
+        expr: dcgm_gpu_utilization > 95
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High GPU utilization detected"
+          description: "GPU utilization has been above 95% for more than 5 minutes"
+      
+      - alert: HighGPUMemoryUsage
+        expr: dcgm_fb_used / dcgm_fb_total * 100 > 90
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High GPU memory usage"
+          description: "GPU memory usage is above 90%"
+      
+      - alert: APIHighLatency
+        expr: histogram_quantile(0.95, http_request_duration_seconds_bucket{job="ai-video-gpu"}) > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API latency"
+          description: "95th percentile latency is above 30 seconds"
+      
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{job="ai-video-gpu",status=~"5.."}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate"
+          description: "Error rate is above 10%"
+      
+      - alert: PodCrashLooping
+        expr: increase(kube_pod_container_status_restarts_total[1h]) > 3
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pod is crash looping"
+          description: "Pod {{ $labels.pod }} has restarted more than 3 times in the last hour"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: ai-video-gpu
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+      - name: prometheus
+        image: prom/prometheus:latest
+        ports:
+        - containerPort: 9090
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus
+        - name: storage
+          mountPath: /prometheus
+        args:
+          - '--config.file=/etc/prometheus/prometheus.yml'
+          - '--storage.tsdb.path=/prometheus'
+          - '--web.console.libraries=/etc/prometheus/console_libraries'
+          - '--web.console.templates=/etc/prometheus/consoles'
+          - '--storage.tsdb.retention.time=200h'
+          - '--web.enable-lifecycle'
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-config
+      - name: storage
+        persistentVolumeClaim:
+          claimName: prometheus-storage
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: ai-video-gpu
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090
+
+---
+# DCGM Exporter for GPU metrics
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: dcgm-exporter
+  namespace: ai-video-gpu
+spec:
+  selector:
+    matchLabels:
+      app: dcgm-exporter
+  template:
+    metadata:
+      labels:
+        app: dcgm-exporter
+    spec:
+      nodeSelector:
+        accelerator: nvidia-gpu
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: dcgm-exporter
+        image: nvcr.io/nvidia/k8s/dcgm-exporter:3.1.7-3.1.4-ubuntu20.04
+        ports:
+        - containerPort: 9400
+          hostPort: 9400
+        env:
+        - name: DCGM_EXPORTER_LISTEN
+          value: ":9400"
+        - name: DCGM_EXPORTER_KUBERNETES
+          value: "true"
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: sys
+          mountPath: /host/sys
+          readOnly: true
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dcgm-exporter
+  namespace: ai-video-gpu
+spec:
+  selector:
+    app: dcgm-exporter
+  ports:
+    - port: 9400
+      targetPort: 9400

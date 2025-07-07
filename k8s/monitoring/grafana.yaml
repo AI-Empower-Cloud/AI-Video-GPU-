@@ -1,0 +1,304 @@
+# Grafana Configuration for AI Video GPU Dashboard
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: ai-video-gpu
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+    - name: Prometheus
+      type: prometheus
+      access: proxy
+      url: http://prometheus:9090
+      isDefault: true
+      editable: true
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-config
+  namespace: ai-video-gpu
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+    - name: 'ai-video-gpu-dashboards'
+      orgId: 1
+      folder: 'AI Video GPU'
+      type: file
+      disableDeletion: false
+      updateIntervalSeconds: 30
+      allowUiUpdates: true
+      options:
+        path: /etc/grafana/provisioning/dashboards
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-video-gpu-dashboard
+  namespace: ai-video-gpu
+data:
+  ai-video-gpu-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "AI Video GPU Monitoring",
+        "tags": ["ai-video-gpu", "gpu", "monitoring"],
+        "timezone": "browser",
+        "refresh": "30s",
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "panels": [
+          {
+            "id": 1,
+            "title": "GPU Utilization",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "avg(dcgm_gpu_utilization)",
+                "legendFormat": "GPU Utilization %"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "min": 0,
+                "max": 100,
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 70},
+                    {"color": "red", "value": 90}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 2,
+            "title": "GPU Memory Usage",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "avg(dcgm_fb_used / dcgm_fb_total * 100)",
+                "legendFormat": "Memory Usage %"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "min": 0,
+                "max": 100,
+                "thresholds": {
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 70},
+                    {"color": "red", "value": 85}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 3,
+            "title": "API Request Rate",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "sum(rate(http_requests_total{job=\"ai-video-gpu\"}[5m]))",
+                "legendFormat": "Requests/sec"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+            "fieldConfig": {
+              "defaults": {
+                "unit": "reqps"
+              }
+            }
+          },
+          {
+            "id": 4,
+            "title": "Active Pods",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "count(kube_pod_status_phase{namespace=\"ai-video-gpu\", phase=\"Running\"})",
+                "legendFormat": "Running Pods"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0}
+          },
+          {
+            "id": 5,
+            "title": "GPU Temperature",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "dcgm_gpu_temp",
+                "legendFormat": "GPU {{gpu}} Temperature"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+            "fieldConfig": {
+              "defaults": {
+                "unit": "celsius"
+              }
+            }
+          },
+          {
+            "id": 6,
+            "title": "Video Generation Queue",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "celery_queue_length{queue=\"video_generation\"}",
+                "legendFormat": "Queue Length"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+          },
+          {
+            "id": 7,
+            "title": "API Response Times",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.50, http_request_duration_seconds_bucket{job=\"ai-video-gpu\"})",
+                "legendFormat": "50th percentile"
+              },
+              {
+                "expr": "histogram_quantile(0.95, http_request_duration_seconds_bucket{job=\"ai-video-gpu\"})",
+                "legendFormat": "95th percentile"
+              },
+              {
+                "expr": "histogram_quantile(0.99, http_request_duration_seconds_bucket{job=\"ai-video-gpu\"})",
+                "legendFormat": "99th percentile"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+            "fieldConfig": {
+              "defaults": {
+                "unit": "s"
+              }
+            }
+          },
+          {
+            "id": 8,
+            "title": "Error Rate",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total{job=\"ai-video-gpu\",status=~\"5..\"}[5m]) / rate(http_requests_total{job=\"ai-video-gpu\"}[5m]) * 100",
+                "legendFormat": "Error Rate %"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent"
+              }
+            }
+          },
+          {
+            "id": 9,
+            "title": "Memory Usage by Container",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "container_memory_usage_bytes{namespace=\"ai-video-gpu\"}",
+                "legendFormat": "{{container}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+            "fieldConfig": {
+              "defaults": {
+                "unit": "bytes"
+              }
+            }
+          }
+        ]
+      }
+    }
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: ai-video-gpu
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: GF_SECURITY_ADMIN_USER
+          value: "admin"
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "admin123"
+        - name: GF_USERS_ALLOW_SIGN_UP
+          value: "false"
+        - name: GF_INSTALL_PLUGINS
+          value: "grafana-piechart-panel,grafana-worldmap-panel"
+        volumeMounts:
+        - name: grafana-storage
+          mountPath: /var/lib/grafana
+        - name: datasources
+          mountPath: /etc/grafana/provisioning/datasources
+        - name: dashboards-config
+          mountPath: /etc/grafana/provisioning/dashboards
+        - name: dashboards
+          mountPath: /etc/grafana/provisioning/dashboards/ai-video-gpu
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: grafana-storage
+        persistentVolumeClaim:
+          claimName: grafana-storage
+      - name: datasources
+        configMap:
+          name: grafana-datasources
+      - name: dashboards-config
+        configMap:
+          name: grafana-dashboards-config
+      - name: dashboards
+        configMap:
+          name: ai-video-gpu-dashboard
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: ai-video-gpu
+spec:
+  selector:
+    app: grafana
+  ports:
+    - port: 3000
+      targetPort: 3000
+  type: LoadBalancer

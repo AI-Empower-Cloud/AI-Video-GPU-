@@ -1,0 +1,43 @@
+# Default configuration for AI Video GPU
+# This file contains all the configurable parameters for the pipeline
+
+gpu:
+  enabled: true
+  device: "cuda"  # "cuda" or "cpu"
+  memory_fraction: 0.8
+  mixed_precision: true
+
+tts:
+  model_name: "microsoft/speecht5_tts"
+  voice_clone_model: "coqui/XTTS-v2"
+  sample_rate: 22050
+  speed: 1.0
+
+lip_sync:
+  model_path: "models/wav2lip"
+  face_detection_confidence: 0.8
+  lip_sync_quality: "high"  # low, medium, high
+
+video:
+  output_resolution: [1920, 1080]  # HD by default
+  fps: 30
+  codec: "h264"
+  bitrate: "5M"
+  format: "mp4"
+
+audio_3d:
+  enabled: false
+  spatial_audio: false
+  reverb_level: 0.2
+
+music:
+  enabled: true
+  volume_level: 0.3
+  fade_duration: 2.0
+  auto_generate: false
+
+pipeline_3d:
+  enabled: false
+  avatar_model: "models/3d_avatar"
+  render_engine: "blender"  # blender, unity, custom
+  lighting_preset: "studio"

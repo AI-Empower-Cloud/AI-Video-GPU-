@@ -10,70 +10,34 @@ I've successfully set up **Wasabi cloud storage integration** for your AI Video 
 - **Endpoint**: `https://s3.wasabisys.com`
 - **Region**: `us-east-1`
 
+### 🎉 **NEW: Buckets Successfully Created!**
+All 5 buckets are now live in your Wasabi account:
+- ✅ `ai-video-gpu-models` - AI models and weights
+- ✅ `ai-video-gpu-outputs` - Generated videos
+- ✅ `ai-video-gpu-uploads` - User uploads
+- ✅ `ai-video-gpu-backups` - System backups
+- ✅ `ai-video-gpu-temp` - Temporary files
+
+### 🧪 **NEW: Full System Testing Complete!**
+✅ Connection to Wasabi working
+✅ File upload/download working
+✅ Multipart upload for large files configured
+✅ File existence checking working
+✅ File metadata retrieval working
+✅ Presigned URL generation working
+✅ File deletion working
+✅ All tests passed successfully
+
 ### 📁 Files Created
 - `src/cloud/wasabi_storage.py` - Complete Wasabi integration module
 - `src/cli/wasabi_commands.py` - CLI interface for Wasabi operations
+- `init_wasabi_buckets.py` - **NEW: Bucket initialization script**
+- `test_wasabi_storage.py` - **NEW: Complete test suite**
 - `config/.env.wasabi` - Environment configuration with your credentials
 - `config/.env.wasabi.template` - Template for other environments
 - `config/wasabi.yml` - Wasabi service configuration
 - `scripts/setup-wasabi.sh` - Setup and initialization script
 - `WASABI_INTEGRATION_GUIDE.md` - Complete documentation
-
-### 🪣 Buckets Configured
-The system will create these buckets:
-- `ai-video-gpu-models` - AI models and weights
-- `ai-video-gpu-outputs` - Generated videos
-- `ai-video-gpu-uploads` - User uploads
-- `ai-video-gpu-backups` - System backups
-- `ai-video-gpu-temp` - Temporary files
-
-## 🚀 Quick Start
-
-### 1. Setup Wasabi Storage
-```bash
-# Complete setup and bucket creation
-make wasabi-setup
-
-# Or run setup script directly
-./scripts/setup-wasabi.sh
-```
-
-### 2. Test Connection
-```bash
-# Test Wasabi connection
-make wasabi-test
-
-# Check storage status
-make wasabi-status
-```
-
-### 3. Upload Your First File
-```bash
-# Upload a video file
-make wasabi-upload FILE=video.mp4 BUCKET=outputs
-
-# Upload with CLI
-python -m src.cli.wasabi_commands upload video.mp4 --bucket-type outputs --public
-```
-
-## 🎯 Key Features Available
-
-### 📤 File Operations
-- **Upload files** with metadata and public access options
-- **Download files** with resumable transfers
-- **List and browse** files across all buckets
-- **Generate presigned URLs** for secure temporary access
-- **Sync directories** for batch operations
-
-### 🔧 Management Commands
-```bash
-make wasabi-setup      # Complete setup
-make wasabi-test       # Test connection
-make wasabi-status     # Show usage stats
-make wasabi-upload     # Upload file
-make wasabi-list       # List files
-make wasabi-sync       # Sync directory
-```
 
 ### 🔄 Auto-Integration
 When enabled, the system will automatically:

@@ -1,0 +1,340 @@
+# AI Video GPU - Docker Compose Configuration
+# Complete containerized deployment with all services
+
+version: '3.8'
+
+services:
+  # Main AI Video GPU application
+  ai-video-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: ai-video-gpu:latest
+    container_name: ai-video-gpu-main
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      # Application settings
+      - AI_VIDEO_GPU_ENV=production
+      - LOG_LEVEL=info
+      - WORKERS=4
+      
+      # GPU optimization
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0,1,2,3
+      - TORCH_HOME=/app/models/torch
+      - TRANSFORMERS_CACHE=/app/models/transformers
+      - HF_HOME=/app/models/huggingface
+      
+      # Performance settings
+      - OMP_NUM_THREADS=8
+      - MKL_NUM_THREADS=8
+      - OPENBLAS_NUM_THREADS=8
+      
+      # Memory management
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+      - CUDA_LAUNCH_BLOCKING=0
+      
+      # Redis connection
+      - REDIS_URL=redis://redis:6379/0
+      
+      # Database connection
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/ai_video_gpu
+      
+      # S3/Cloud storage (optional)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+      - S3_BUCKET=${S3_BUCKET:-}
+    ports:
+      - "8000:8000"  # FastAPI
+      - "7860:7860"  # Gradio
+      - "6006:6006"  # TensorBoard
+      - "8080:8080"  # Additional services
+    volumes:
+      # Model storage (persistent)
+      - ai_video_models:/app/models
+      - ai_video_cache:/app/cache
+      
+      # Output storage
+      - ai_video_output:/app/output
+      - ai_video_logs:/app/logs
+      
+      # Configuration overrides
+      - ./config:/app/config/user:ro
+      
+      # GPU device access
+      - /dev/nvidia0:/dev/nvidia0
+      - /dev/nvidiactl:/dev/nvidiactl
+      - /dev/nvidia-uvm:/dev/nvidia-uvm
+    networks:
+      - ai-video-network
+    depends_on:
+      - redis
+      - postgres
+    healthcheck:
+      test: ["CMD", "python3", "/app/main.py", "status", "--health-check"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 120s
+
+  # Redis for caching and job queues
+  redis:
+    image: redis:7-alpine
+    container_name: ai-video-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai-video-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # PostgreSQL for metadata and job tracking
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai-video-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=ai_video_gpu
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
+    networks:
+      - ai-video-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Celery worker for background tasks
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: ai-video-gpu:latest
+    container_name: ai-video-celery
+    restart: unless-stopped
+    command: celery -A src.api.celery_app worker --loglevel=info --concurrency=2
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/ai_video_gpu
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    volumes:
+      - ai_video_models:/app/models
+      - ai_video_cache:/app/cache
+      - ai_video_output:/app/output
+      - ai_video_logs:/app/logs
+    networks:
+      - ai-video-network
+    depends_on:
+      - redis
+      - postgres
+
+  # Celery Beat scheduler
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: ai-video-gpu:latest
+    container_name: ai-video-celery-beat
+    restart: unless-stopped
+    command: celery -A src.api.celery_app beat --loglevel=info
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/ai_video_gpu
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    volumes:
+      - ai_video_logs:/app/logs
+    networks:
+      - ai-video-network
+    depends_on:
+      - redis
+      - postgres
+
+  # Flower for Celery monitoring
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: ai-video-gpu:latest
+    container_name: ai-video-flower
+    restart: unless-stopped
+    command: celery -A src.api.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+    networks:
+      - ai-video-network
+    depends_on:
+      - redis
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: ai-video-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ai_video_output:/var/www/output:ro
+    networks:
+      - ai-video-network
+    depends_on:
+      - ai-video-gpu
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ai-video-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    networks:
+      - ai-video-network
+
+  # Grafana for metrics visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ai-video-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - ai-video-network
+    depends_on:
+      - prometheus
+
+# Named volumes for persistent data
+volumes:
+  ai_video_models:
+    driver: local
+  ai_video_cache:
+    driver: local
+  ai_video_output:
+    driver: local
+  ai_video_logs:
+    driver: local
+  redis_data:
+    driver: local
+  postgres_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# Network for inter-service communication
+networks:
+  ai-video-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+    
+    # Network
+    ports:
+      - "8000:8000"  # For web interface
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Command override
+    command: ["python3", "main.py", "status"]
+
+  # Optional: Web interface service
+  web-interface:
+    build: .
+    image: ai-video-gpu:latest
+    container_name: ai-video-gpu-web
+    
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    
+    volumes:
+      - ./assets:/app/assets
+      - ./output:/app/output
+      - ./config:/app/config
+    
+    ports:
+      - "8080:8080"
+    
+    depends_on:
+      - ai-video-gpu
+    
+    # Run web interface (if implemented)
+    command: ["python3", "-m", "src.web.app"]
+    
+    restart: unless-stopped
+
+# Networks
+networks:
+  default:
+    name: ai-video-gpu-network

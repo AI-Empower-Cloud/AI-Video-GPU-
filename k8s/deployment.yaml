@@ -1,0 +1,510 @@
+# AI Video GPU - Kubernetes Deployment
+# Complete Kubernetes configuration for production deployment
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-video-gpu
+  labels:
+    name: ai-video-gpu
+    environment: production
+
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-video-gpu-config
+  namespace: ai-video-gpu
+data:
+  AI_VIDEO_GPU_ENV: "production"
+  LOG_LEVEL: "info"
+  WORKERS: "4"
+  OMP_NUM_THREADS: "8"
+  MKL_NUM_THREADS: "8"
+  OPENBLAS_NUM_THREADS: "8"
+  PYTORCH_CUDA_ALLOC_CONF: "max_split_size_mb:512"
+  CUDA_LAUNCH_BLOCKING: "0"
+  TORCH_HOME: "/app/models/torch"
+  TRANSFORMERS_CACHE: "/app/models/transformers"
+  HF_HOME: "/app/models/huggingface"
+
+---
+# Secret for sensitive configuration
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ai-video-gpu-secrets
+  namespace: ai-video-gpu
+type: Opaque
+data:
+  # Base64 encoded values - replace with actual secrets
+  DATABASE_URL: cG9zdGdyZXNxbDovL3Bvc3RncmVzOnBvc3RncmVzQHBvc3RncmVzOjU0MzIvYWlfdmlkZW9fZ3B1
+  REDIS_URL: cmVkaXM6Ly9yZWRpczozNjM3OS8w
+  AWS_ACCESS_KEY_ID: ""
+  AWS_SECRET_ACCESS_KEY: ""
+
+---
+# Persistent Volume for model storage
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ai-video-models-pv
+  namespace: ai-video-gpu
+spec:
+  capacity:
+    storage: 100Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: fast-ssd
+  mountOptions:
+    - hard
+    - nfsvers=4.1
+  nfs:
+    path: /nfs/ai-video-models
+    server: nfs-server.example.com
+
+---
+# Persistent Volume Claim for models
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-video-models-pvc
+  namespace: ai-video-gpu
+spec:
+  accessModes:
+    - ReadWriteMany
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: fast-ssd
+
+---
+# Persistent Volume Claim for output
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-video-output-pvc
+  namespace: ai-video-gpu
+spec:
+  accessModes:
+    - ReadWriteMany
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 200Gi
+  storageClassName: fast-ssd
+
+---
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: ai-video-gpu
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        command:
+          - redis-server
+          - --appendonly
+          - "yes"
+          - --maxmemory
+          - "2gb"
+          - --maxmemory-policy
+          - "allkeys-lru"
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: redis-data-pvc
+
+---
+# Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: ai-video-gpu
+spec:
+  selector:
+    app: redis
+  ports:
+    - protocol: TCP
+      port: 6379
+      targetPort: 6379
+
+---
+# PostgreSQL Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: ai-video-gpu
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: "ai_video_gpu"
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          value: "postgres"
+        - name: POSTGRES_INITDB_ARGS
+          value: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: postgres-data-pvc
+
+---
+# PostgreSQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: ai-video-gpu
+spec:
+  selector:
+    app: postgres
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+
+---
+# Main AI Video GPU Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-video-gpu
+  namespace: ai-video-gpu
+  labels:
+    app: ai-video-gpu
+    version: v1.0.0
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: ai-video-gpu
+  template:
+    metadata:
+      labels:
+        app: ai-video-gpu
+        version: v1.0.0
+    spec:
+      nodeSelector:
+        accelerator: nvidia-gpu
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: ai-video-gpu
+        image: ghcr.io/your-org/ai-video-gpu:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+        - containerPort: 7860
+          name: gradio
+        - containerPort: 6006
+          name: tensorboard
+        env:
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0,1,2,3"
+        envFrom:
+        - configMapRef:
+            name: ai-video-gpu-config
+        - secretRef:
+            name: ai-video-gpu-secrets
+        volumeMounts:
+        - name: models-storage
+          mountPath: /app/models
+        - name: output-storage
+          mountPath: /app/output
+        - name: cache-storage
+          mountPath: /app/cache
+        - name: logs-storage
+          mountPath: /app/logs
+        resources:
+          requests:
+            memory: "8Gi"
+            cpu: "4000m"
+            nvidia.com/gpu: 1
+          limits:
+            memory: "16Gi"
+            cpu: "8000m"
+            nvidia.com/gpu: 2
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /startup
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 12
+      volumes:
+      - name: models-storage
+        persistentVolumeClaim:
+          claimName: ai-video-models-pvc
+      - name: output-storage
+        persistentVolumeClaim:
+          claimName: ai-video-output-pvc
+      - name: cache-storage
+        emptyDir:
+          sizeLimit: 20Gi
+      - name: logs-storage
+        emptyDir:
+          sizeLimit: 5Gi
+      imagePullSecrets:
+      - name: ghcr-secret
+
+---
+# Main Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-video-gpu-service
+  namespace: ai-video-gpu
+  labels:
+    app: ai-video-gpu
+spec:
+  type: LoadBalancer
+  selector:
+    app: ai-video-gpu
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8000
+      targetPort: 8000
+    - name: gradio
+      protocol: TCP
+      port: 7860
+      targetPort: 7860
+    - name: tensorboard
+      protocol: TCP
+      port: 6006
+      targetPort: 6006
+
+---
+# Celery Worker Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: ai-video-gpu
+  labels:
+    app: celery-worker
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: celery-worker
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+    spec:
+      nodeSelector:
+        accelerator: nvidia-gpu
+      containers:
+      - name: celery-worker
+        image: ghcr.io/your-org/ai-video-gpu:latest
+        command: ["celery"]
+        args: ["-A", "src.api.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+        env:
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        envFrom:
+        - configMapRef:
+            name: ai-video-gpu-config
+        - secretRef:
+            name: ai-video-gpu-secrets
+        volumeMounts:
+        - name: models-storage
+          mountPath: /app/models
+        - name: output-storage
+          mountPath: /app/output
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2000m"
+            nvidia.com/gpu: 1
+          limits:
+            memory: "8Gi"
+            cpu: "4000m"
+            nvidia.com/gpu: 1
+      volumes:
+      - name: models-storage
+        persistentVolumeClaim:
+          claimName: ai-video-models-pvc
+      - name: output-storage
+        persistentVolumeClaim:
+          claimName: ai-video-output-pvc
+
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-video-gpu-hpa
+  namespace: ai-video-gpu
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-video-gpu
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 30
+
+---
+# Network Policy for security
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ai-video-gpu-netpol
+  namespace: ai-video-gpu
+spec:
+  podSelector:
+    matchLabels:
+      app: ai-video-gpu
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+  - from:
+    - podSelector:
+        matchLabels:
+          app: celery-worker
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: redis
+    ports:
+    - protocol: TCP
+      port: 6379
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    ports:
+    - protocol: TCP
+      port: 5432
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80

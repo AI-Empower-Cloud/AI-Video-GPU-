@@ -1,0 +1,168 @@
+# Core AI/ML libraries
+torch>=2.0.0
+torchaudio>=2.0.0
+torchvision>=0.15.0
+transformers>=4.30.0
+diffusers>=0.18.0
+accelerate>=0.20.0
+xformers>=0.0.20  # Memory efficient attention
+
+# Cloud storage (Wasabi/S3)
+boto3>=1.34.0
+botocore>=1.34.0
+s3transfer>=0.10.0
+
+# Audio processing
+librosa>=0.10.0
+soundfile>=0.12.0
+scipy>=1.10.0
+numpy>=1.24.0
+wave>=0.0.2  # Built-in Python module
+
+# Video processing
+opencv-python>=4.8.0
+moviepy>=1.0.3
+ffmpeg-python>=0.2.0
+pillow>=10.0.0
+
+# 3D and graphics - Enhanced for Blender integration
+trimesh>=3.21.0
+pyrender>=0.1.45
+moderngl>=5.8.0
+bpy>=3.6.0  # Blender Python API
+mathutils>=3.3.0  # Blender math utilities
+
+# Text-to-speech (TTS) - Enhanced for voice synthesis
+TTS>=0.18.0  # Coqui TTS
+tortoise-tts>=2.8.0  # Tortoise TTS
+xtts>=0.0.12  # XTTS for voice cloning
+pydub>=0.25.0
+espeak-ng
+phonemizer>=3.2.0  # For phoneme conversion
+
+# Face and lip sync - Wav2Lip integration
+mediapipe>=0.10.0
+face-recognition>=1.3.0
+dlib>=19.24.0
+opencv-contrib-python>=4.8.0  # Extended OpenCV for Wav2Lip
+insightface>=0.7.3  # For better face detection
+retinaface-pytorch>=0.0.11  # Face detection for Wav2Lip
+
+# Visual Generation - Stable Diffusion & AnimateDiff
+stable-diffusion-webui>=1.6.0
+controlnet-aux>=0.4.0
+animatediff>=0.1.0
+comfyui>=0.1.0  # Alternative SD interface
+
+# Audio Effects and Music - BBC FX & Freesound integration
+freesound-python>=0.7.0  # Freesound API
+essentia>=2.1b6.dev1034  # Music analysis
+aubio>=0.4.9  # Audio analysis
+madmom>=0.16.1  # Music information retrieval
+
+# Web interface (optional)
+fastapi>=0.100.0
+uvicorn>=0.22.0
+gradio>=3.35.0
+streamlit>=1.28.0  # Additional UI option
+
+# Utilities
+tqdm>=4.65.0
+pyyaml>=6.0
+click>=8.1.0
+loguru>=0.7.0
+wandb>=0.15.0
+
+# Development tools
+pytest>=7.4.0
+black>=23.0.0
+isort>=5.12.0
+flake8>=6.0.0
+
+# AI Image/Video Generation
+diffusers>=0.18.0
+
+# AI Visual Generation - Stable Diffusion & Animation
+controlnet-aux>=0.0.6  # ControlNet support
+xformers>=0.0.20  # Memory efficient transformers
+invisible-watermark>=0.2.0  # For SD
+compel>=2.0.0  # Prompt weighting
+animatediff>=0.1.0  # AnimateDiff integration
+
+# Audio enhancement and effects
+freesound-python>=0.7.0  # Freesound API
+pyroomacoustics>=0.7.0  # Acoustic simulation
+essentia>=2.1b6.dev374  # Audio analysis
+pyaudio>=0.2.11  # Real-time audio processing
+pedalboard>=0.7.0  # Spotify's audio effects library
+noisereduce>=2.0.0  # Noise reduction
+
+# Video Quality Enhancement & Post-Processing
+Real-ESRGAN>=0.3.0  # Video upscaling
+GFPGAN>=1.3.8  # Face restoration
+CodeFormer>=0.1.0  # Face enhancement
+rembg>=2.0.50  # Background removal
+backgroundremover>=0.2.6  # Alternative background removal
+
+# Advanced AI Models
+segment-anything>=1.0  # SAM for object segmentation
+depth-anything>=1.0.0  # Depth estimation
+CLIP>=1.0  # CLIP for image understanding
+sentence-transformers>=2.2.0  # Text embeddings
+openai-whisper>=20230314  # Speech recognition
+
+# GPU Optimization & Monitoring
+nvidia-ml-py3>=7.352.0  # NVIDIA GPU monitoring
+gpustat>=1.1.0  # GPU statistics
+py3nvml>=0.2.7  # NVIDIA management library
+psutil>=5.9.0  # System monitoring
+memory-profiler>=0.61.0  # Memory usage profiling
+
+# Video Codecs & Formats
+av>=10.0.0  # Python binding for FFmpeg
+vidgear>=0.3.2  # Advanced video processing
+imageio[ffmpeg]>=2.31.0  # Video I/O with FFmpeg
+imageio-ffmpeg>=0.4.8  # FFmpeg wrapper
+
+# Machine Learning Utilities
+scikit-learn>=1.3.0  # ML utilities
+onnx>=1.14.0  # ONNX model support
+onnxruntime-gpu>=1.15.0  # ONNX GPU runtime
+openvino>=2023.0.0  # Intel optimization
+
+# Cloud & Storage Integration
+boto3>=1.28.0  # AWS S3 integration
+azure-storage-blob>=12.17.0  # Azure Blob storage
+google-cloud-storage>=2.10.0  # Google Cloud storage
+wasabi-sdk>=1.0.0  # Wasabi cloud storage (S3-compatible)
+minio>=7.1.0  # S3-compatible client for Wasabi
+requests>=2.31.0  # HTTP requests
+aiohttp>=3.8.0  # Async HTTP
+
+# Database & Caching
+redis>=4.6.0  # Caching and job queues
+celery>=5.3.0  # Distributed task queue
+sqlalchemy>=2.0.0  # Database ORM
+alembic>=1.11.0  # Database migrations
+
+# Security & Authentication
+cryptography>=41.0.0  # Encryption
+python-jose>=3.3.0  # JWT tokens
+passlib>=1.7.4  # Password hashing
+python-multipart>=0.0.6  # File uploads
+
+# API Documentation & Validation
+pydantic>=2.0.0  # Data validation
+typing-extensions>=4.7.0  # Type hints
+email-validator>=2.0.0  # Email validation
+
+# Monitoring & Logging
+prometheus-client>=0.17.0  # Metrics collection
+structlog>=23.1.0  # Structured logging
+sentry-sdk>=1.28.0  # Error tracking
+
+# Additional Development Tools
+pre-commit>=3.3.0  # Git hooks
+mypy>=1.4.0  # Type checking
+coverage>=7.2.0  # Code coverage
+bandit>=1.7.5  # Security linting

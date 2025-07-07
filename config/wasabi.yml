@@ -1,0 +1,75 @@
+# =============================================================================
+# Wasabi Cloud Storage Configuration
+# S3-Compatible Object Storage for AI Video GPU
+# =============================================================================
+
+# Wasabi Configuration
+wasabi:
+  enabled: true
+  endpoint_url: "https://s3.wasabisys.com"
+  region: "us-east-1"  # Default Wasabi region
+  
+  # Storage settings
+  buckets:
+    models: "ai-video-gpu-models"
+    outputs: "ai-video-gpu-outputs" 
+    uploads: "ai-video-gpu-uploads"
+    backups: "ai-video-gpu-backups"
+    temp: "ai-video-gpu-temp"
+  
+  # Upload settings - Optimized for large files
+  multipart_threshold: 67108864  # 64MB - Files larger than this use multipart
+  multipart_chunksize: 8388608   # 8MB - Size of each part in multipart upload
+  max_concurrency: 10            # Maximum parallel uploads
+  
+  # Large file upload settings
+  large_file_threshold: 1073741824  # 1GB - Files larger than this get special handling
+  large_file_chunksize: 33554432    # 32MB - Larger chunks for very large files
+  large_file_max_concurrency: 5     # Fewer concurrent uploads for large files
+  
+  # Upload retry settings
+  retry_attempts: 3
+  retry_delay: 2                 # seconds
+  
+  # Bandwidth settings (bytes per second, 0 = unlimited)
+  upload_bandwidth_limit: 0      # No limit by default
+  download_bandwidth_limit: 0    # No limit by default
+  
+  # Security settings
+  server_side_encryption: "AES256"
+  
+  # Lifecycle policies
+  lifecycle:
+    temp_files_expire_days: 7
+    backup_transition_days: 30
+    outputs_expire_days: 365
+
+# Integration settings
+cloud_storage:
+  primary_provider: "wasabi"  # wasabi, aws, azure, gcp
+  backup_provider: "local"    # Secondary storage
+  
+  # Auto-upload settings
+  auto_upload:
+    models: true
+    outputs: true
+    backups: true
+    logs: false
+  
+  # Sync settings
+  sync:
+    enabled: true
+    interval_minutes: 30
+    retry_attempts: 3
+    
+# Performance settings
+performance:
+  parallel_uploads: 5
+  compression: true
+  encryption_in_transit: true
+  
+# Monitoring
+monitoring:
+  track_usage: true
+  log_transfers: true
+  alert_on_failures: true

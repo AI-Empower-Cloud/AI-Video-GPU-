@@ -1,0 +1,39 @@
+[
+  {
+    "script": "Welcome to AI Video GPU! This revolutionary tool transforms simple text into professional-quality videos using cutting-edge artificial intelligence. With GPU acceleration, we can create stunning visuals, realistic voice synthesis, and perfect lip synchronization in minutes, not hours.",
+    "avatar_image": "assets/avatars/presenter.jpg",
+    "background_music": "assets/music/introduction.mp3",
+    "use_3d": false
+  },
+  {
+    "script": "Our advanced text-to-speech engine supports voice cloning, allowing you to create videos with any voice you desire. Simply provide a short voice sample, and our AI will learn to replicate that voice with remarkable accuracy.",
+    "avatar_image": "assets/avatars/tech_expert.jpg",
+    "voice_sample": "assets/voices/tech_voice.wav",
+    "background_music": "assets/music/tech_ambient.mp3",
+    "use_3d": false
+  },
+  {
+    "script": "The lip synchronization technology ensures that every word perfectly matches the mouth movements of your avatar. Our Wav2Lip integration provides movie-quality lip sync that brings your digital characters to life.",
+    "avatar_image": "assets/avatars/close_up.jpg",
+    "background_music": "assets/music/demo.mp3",
+    "use_3d": false
+  },
+  {
+    "script": "For the ultimate in realism, enable our 3D avatar system. Watch as full three-dimensional characters express emotions, make gestures, and deliver your message with lifelike presence and depth.",
+    "avatar_image": "assets/avatars/3d_character.obj",
+    "background_music": "assets/music/futuristic.mp3",
+    "use_3d": true
+  },
+  {
+    "script": "Background music and audio effects are automatically integrated and balanced. Our intelligent audio engine ensures your voice is always clear and prominent while maintaining the perfect atmospheric soundtrack.",
+    "avatar_image": "assets/avatars/music_presenter.jpg",
+    "background_music": "assets/music/showcase.mp3",
+    "use_3d": false
+  },
+  {
+    "script": "Whether you're creating educational content, marketing videos, or entertainment, AI Video GPU scales to meet your needs. Generate videos from 30 seconds to over an hour with consistent quality and performance.",
+    "avatar_image": "assets/avatars/business.jpg",
+    "background_music": "assets/music/corporate.mp3",
+    "use_3d": false
+  }
+]

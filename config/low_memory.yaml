@@ -1,0 +1,40 @@
+# Low memory configuration for constrained systems
+# Use this for systems with limited GPU memory
+
+gpu:
+  enabled: true
+  device: "cuda"
+  memory_fraction: 0.6  # Use less GPU memory
+  mixed_precision: true
+
+tts:
+  model_name: "microsoft/speecht5_tts"
+  voice_clone_model: "coqui/XTTS-v2"
+  sample_rate: 16000  # Lower sample rate
+  speed: 1.0
+
+lip_sync:
+  model_path: "models/wav2lip"
+  face_detection_confidence: 0.7  # Slightly lower for performance
+  lip_sync_quality: "medium"  # Reduced quality for memory
+
+video:
+  output_resolution: [1280, 720]  # Lower resolution
+  fps: 24  # Slightly lower FPS
+  codec: "h264"
+  bitrate: "3M"  # Lower bitrate
+  format: "mp4"
+
+audio_3d:
+  enabled: false
+  spatial_audio: false
+  reverb_level: 0.1
+
+music:
+  enabled: true
+  volume_level: 0.25
+  fade_duration: 1.5
+  auto_generate: false
+
+pipeline_3d:
+  enabled: false  # Disable 3D for memory savings

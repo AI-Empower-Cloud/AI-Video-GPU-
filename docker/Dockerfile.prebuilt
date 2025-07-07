@@ -1,0 +1,187 @@
+# =============================================================================
+# AI Video GPU - Prebuilt Production Container
+# Multi-stage CUDA-optimized build with all modules pre-linked
+# =============================================================================
+
+# Stage 1: Base CUDA Environment with System Dependencies
+FROM nvidia/cuda:12.2-devel-ubuntu22.04 AS base
+
+LABEL maintainer="AI Video GPU Team"
+LABEL version="1.0.0"
+LABEL description="Production-ready GPU-accelerated AI Video Generation System"
+
+# Environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV CUDA_VISIBLE_DEVICES=all
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+ENV TORCH_CUDA_ARCH_LIST="6.0;6.1;7.0;7.5;8.0;8.6;8.9;9.0"
+ENV FORCE_CUDA=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-dev \
+    python3.11-venv \
+    python3-pip \
+    build-essential \
+    cmake \
+    git \
+    curl \
+    wget \
+    unzip \
+    zip \
+    software-properties-common \
+    pkg-config \
+    libssl-dev \
+    libffi-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    libgif-dev \
+    libwebp-dev \
+    libopencv-dev \
+    libavcodec-dev \
+    libavformat-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libswresample-dev \
+    libpostproc-dev \
+    libeigen3-dev \
+    libgtk-3-dev \
+    libvtk9-dev \
+    libpcl-dev \
+    libassimp-dev \
+    libglew-dev \
+    libglfw3-dev \
+    libgl1-mesa-dev \
+    libglu1-mesa-dev \
+    libopenexr-dev \
+    libhdf5-dev \
+    libprotobuf-dev \
+    protobuf-compiler \
+    libyaml-dev \
+    libxml2-dev \
+    libxslt1-dev \
+    libcairo2-dev \
+    libgirepository1.0-dev \
+    gstreamer1.0-tools \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    gstreamer1.0-libav \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    ffmpeg \
+    x264 \
+    x265 \
+    libx264-dev \
+    libx265-dev \
+    libnuma-dev \
+    libopenmpi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create Python alias
+RUN ln -sf /usr/bin/python3.11 /usr/bin/python
+
+# Stage 2: Python Dependencies and AI Models
+FROM base AS python-deps
+
+# Upgrade pip and install base packages
+RUN python -m pip install --upgrade pip setuptools wheel
+
+# Create app directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY requirements.txt requirements-dev.txt ./
+
+# Install Python dependencies with optimizations
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r requirements-dev.txt
+
+# Install PyTorch with CUDA support (explicit version for stability)
+RUN pip install torch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 \
+    --index-url https://download.pytorch.org/whl/cu121
+
+# Install additional AI/ML libraries
+RUN pip install --no-cache-dir \
+    transformers==4.36.0 \
+    diffusers==0.24.0 \
+    accelerate==0.25.0 \
+    xformers==0.0.22.post7 \
+    bitsandbytes==0.41.3 \
+    optimum==1.16.0 \
+    tokenizers==0.15.0 \
+    datasets==2.16.0 \
+    evaluate==0.4.1 \
+    gradio==4.8.0 \
+    streamlit==1.29.0 \
+    fastapi==0.105.0 \
+    uvicorn==0.24.0
+
+# Stage 3: Model Pre-download and Caching
+FROM python-deps AS model-cache
+
+# Create model cache directories
+RUN mkdir -p /app/models/huggingface /app/models/weights /app/models/checkpoints
+
+# Create model download script
+COPY docker/download_models.py /tmp/download_models.py
+
+# Pre-download commonly used models for faster startup
+RUN python /tmp/download_models.py
+
+# Stage 4: Application Code and Final Setup
+FROM model-cache AS app
+
+# Copy application code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p \
+    /app/data \
+    /app/outputs \
+    /app/temp \
+    /app/logs \
+    /app/static \
+    /app/media \
+    /app/uploads \
+    /app/downloads \
+    /app/cache \
+    /app/backups
+
+# Set proper permissions
+RUN chmod +x scripts/*.sh && \
+    chmod +x setup.sh && \
+    chown -R 1000:1000 /app
+
+# Install the application
+RUN pip install -e .
+
+# Create non-root user for security
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Switch to non-root user
+USER appuser
+
+# Expose ports
+EXPOSE 8000 8080 8501 5555 9090 3000
+
+# Environment variables for runtime
+ENV PYTHONPATH=/app
+ENV MODEL_CACHE_DIR=/app/models
+ENV OUTPUT_DIR=/app/outputs
+ENV LOG_DIR=/app/logs
+ENV CUDA_LAUNCH_BLOCKING=1
+
+# Default command
+CMD ["python", "main.py", "--mode", "api", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,178 @@
+# 🚀 AI GPU Studio - Azure Deployment via GitHub Actions
+# Complete website deployment to Azure with GPU support
+
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment Environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  AZURE_RESOURCE_GROUP: ai-gpu-studio-rg
+  AZURE_LOCATION: eastus
+  AZURE_WEBAPP_NAME: ai-gpu-studio
+  AZURE_CONTAINER_REGISTRY: aigpustudio
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    
+    steps:
+    - name: 🔍 Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: 🔐 Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: 🏗️ Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: 📦 Install Frontend Dependencies
+      run: |
+        cd frontend
+        npm ci
+        npm run build
+
+    - name: 📦 Install Backend Dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+
+    - name: 🧪 Run Tests
+      run: |
+        cd frontend && npm test -- --watchAll=false
+        python -m pytest tests/ -v
+
+    - name: 🏗️ Create Azure Resources
+      run: |
+        # Create Resource Group
+        az group create \
+          --name ${{ env.AZURE_RESOURCE_GROUP }} \
+          --location ${{ env.AZURE_LOCATION }}
+
+        # Create Container Registry
+        az acr create \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.AZURE_CONTAINER_REGISTRY }} \
+          --sku Basic \
+          --admin-enabled true
+
+        # Create App Service Plan (Linux)
+        az appservice plan create \
+          --name ai-gpu-studio-plan \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --location ${{ env.AZURE_LOCATION }} \
+          --is-linux \
+          --sku P1V3
+
+        # Create Web App
+        az webapp create \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --plan ai-gpu-studio-plan \
+          --name ${{ env.AZURE_WEBAPP_NAME }} \
+          --runtime "NODE:20-lts"
+
+    - name: 🐳 Build and Push Docker Images
+      run: |
+        # Login to ACR
+        az acr login --name ${{ env.AZURE_CONTAINER_REGISTRY }}
+        
+        # Build and push frontend
+        docker build -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/frontend:latest \
+          -f frontend/Dockerfile frontend/
+        docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/frontend:latest
+        
+        # Build and push backend
+        docker build -t ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/backend:latest \
+          -f Dockerfile .
+        docker push ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/backend:latest
+
+    - name: 🚀 Deploy to Azure Web App
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ env.AZURE_WEBAPP_NAME }}
+        images: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/frontend:latest
+
+    - name: ⚙️ Configure App Settings
+      run: |
+        az webapp config appsettings set \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.AZURE_WEBAPP_NAME }} \
+          --settings \
+            WEBSITES_ENABLE_APP_SERVICE_STORAGE=false \
+            DOCKER_REGISTRY_SERVER_URL=https://${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io \
+            DOCKER_REGISTRY_SERVER_USERNAME=$(az acr credential show --name ${{ env.AZURE_CONTAINER_REGISTRY }} --query username -o tsv) \
+            DOCKER_REGISTRY_SERVER_PASSWORD=$(az acr credential show --name ${{ env.AZURE_CONTAINER_REGISTRY }} --query passwords[0].value -o tsv) \
+            NODE_ENV=production \
+            PORT=8000
+
+    - name: 🏥 Health Check
+      run: |
+        # Wait for deployment
+        sleep 60
+        
+        # Check if site is accessible
+        SITE_URL="https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
+        echo "🔍 Checking site health: $SITE_URL"
+        
+        if curl -f -s $SITE_URL > /dev/null; then
+          echo "✅ Site is healthy and accessible"
+        else
+          echo "❌ Site health check failed"
+          exit 1
+        fi
+
+    - name: 📊 Deployment Summary
+      run: |
+        echo "🎉 Azure Deployment Complete!"
+        echo "📊 Deployment Summary:"
+        echo "├── Resource Group: ${{ env.AZURE_RESOURCE_GROUP }}"
+        echo "├── Location: ${{ env.AZURE_LOCATION }}"
+        echo "├── Web App: ${{ env.AZURE_WEBAPP_NAME }}"
+        echo "├── Container Registry: ${{ env.AZURE_CONTAINER_REGISTRY }}"
+        echo "└── Site URL: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
+        
+        # Save deployment info
+        cat > deployment-info.json << EOF
+        {
+          "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          "environment": "${{ github.event.inputs.environment || 'production' }}",
+          "resource_group": "${{ env.AZURE_RESOURCE_GROUP }}",
+          "webapp_name": "${{ env.AZURE_WEBAPP_NAME }}",
+          "site_url": "https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net",
+          "commit_sha": "${{ github.sha }}",
+          "commit_message": "${{ github.event.head_commit.message }}"
+        }
+        EOF
+
+    - name: 📝 Upload Deployment Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-info
+        path: deployment-info.json

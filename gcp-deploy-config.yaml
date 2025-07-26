@@ -1,0 +1,6 @@
+project_id: ai-video-gpu-project
+service_account: ai-video-gpu-service@ai-video-gpu-project.iam.gserviceaccount.com
+region: us-central1
+zone: us-central1-a
+storage_bucket: ai-video-gpu-bucket
+cluster_name: ai-video-gpu-cluster

@@ -1,0 +1,534 @@
+# AI Video GPU - Microservices Container Architecture
+# Complete containerized deployment with specialized GPU-accelerated services
+
+version: '3.8'
+
+services:
+  # ============================================================================
+  # GenAI Video Generation Service
+  # ============================================================================
+  video-generator:
+    build:
+      context: .
+      dockerfile: containers/video-generator/Dockerfile
+    image: ai-video-gpu/video-generator:latest
+    container_name: video-generator
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 2  # Allocate 2 GPUs for video generation
+              capabilities: [gpu]
+    environment:
+      # GPU Configuration
+      - NVIDIA_VISIBLE_DEVICES=0,1
+      - CUDA_VISIBLE_DEVICES=0,1
+      
+      # Service Configuration
+      - SERVICE_TYPE=video_generator
+      - SERVICE_PORT=8001
+      - LOG_LEVEL=info
+      
+      # Model Configuration
+      - ANIMATEDIFF_MODEL_PATH=/app/models/animatediff
+      - SVD_MODEL_PATH=/app/models/svd
+      - GEN2_MODEL_PATH=/app/models/gen2
+      
+      # Performance Settings
+      - TORCH_CUDNN_V8_API_ENABLED=1
+      - OMP_NUM_THREADS=8
+      - MKL_NUM_THREADS=8
+      
+      # Hollywood/Bollywood Features
+      - ENABLE_HOLLYWOOD_VFX=true
+      - ENABLE_BOLLYWOOD_SCENES=true
+      - ENABLE_8K_RENDERING=true
+    ports:
+      - "8001:8001"
+    volumes:
+      - ai_video_models:/app/models
+      - ai_video_cache:/app/cache
+      - ai_video_output:/app/output/video
+      - ./config/video-generator:/app/config:ro
+    networks:
+      - ai-video-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # ============================================================================
+  # Voice Generation & TTS Service
+  # ============================================================================
+  voice-tts:
+    build:
+      context: .
+      dockerfile: containers/voice-tts/Dockerfile
+    image: ai-video-gpu/voice-tts:latest
+    container_name: voice-tts
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1  # Single GPU for voice generation
+              capabilities: [gpu]
+    environment:
+      # GPU Configuration
+      - NVIDIA_VISIBLE_DEVICES=2
+      - CUDA_VISIBLE_DEVICES=2
+      
+      # Service Configuration
+      - SERVICE_TYPE=voice_tts
+      - SERVICE_PORT=8002
+      - LOG_LEVEL=info
+      
+      # Voice Models
+      - BARK_MODEL_PATH=/app/models/bark
+      - TORTOISE_MODEL_PATH=/app/models/tortoise
+      - COQUI_MODEL_PATH=/app/models/coqui
+      - INDIC_TTS_MODEL_PATH=/app/models/indic_tts
+      
+      # Hollywood Voice Features
+      - ENABLE_HOLLYWOOD_VOICES=true
+      - ENABLE_EMOTIONAL_VOICES=true
+      - ENABLE_VOICE_CLONING=true
+      
+      # Bollywood Voice Features
+      - ENABLE_INDIC_LANGUAGES=true
+      - ENABLE_CLASSICAL_SINGERS=true
+      - ENABLE_REGIONAL_DIALECTS=true
+      
+      # Supported Languages (50+)
+      - SUPPORTED_LANGUAGES=en,hi,ta,te,bn,gu,mr,pa,kn,ml,as,or,ur,ne,si,my
+    ports:
+      - "8002:8002"
+    volumes:
+      - ai_video_models:/app/models
+      - ai_video_cache:/app/cache
+      - ai_video_output:/app/output/audio
+      - ./config/voice-tts:/app/config:ro
+    networks:
+      - ai-video-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # Lip Sync Service
+  # ============================================================================
+  lip-sync:
+    build:
+      context: .
+      dockerfile: containers/lip-sync/Dockerfile
+    image: ai-video-gpu/lip-sync:latest
+    container_name: lip-sync
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1  # Single GPU for lip sync
+              capabilities: [gpu]
+    environment:
+      # GPU Configuration
+      - NVIDIA_VISIBLE_DEVICES=3
+      - CUDA_VISIBLE_DEVICES=3
+      
+      # Service Configuration
+      - SERVICE_TYPE=lip_sync
+      - SERVICE_PORT=8003
+      - LOG_LEVEL=info
+      
+      # Lip Sync Models
+      - WAV2LIP_MODEL_PATH=/app/models/wav2lip
+      - SADTALKER_MODEL_PATH=/app/models/sadtalker
+      - FACESWAP_MODEL_PATH=/app/models/faceswap
+      
+      # Quality Settings
+      - LIP_SYNC_QUALITY=high
+      - FACE_ENHANCEMENT=true
+      - BACKGROUND_SEPARATION=true
+      
+      # Hollywood Features
+      - ENABLE_ACTOR_FACE_SWAP=true
+      - ENABLE_DE_AGING=true
+      - ENABLE_4K_LIP_SYNC=true
+    ports:
+      - "8003:8003"
+    volumes:
+      - ai_video_models:/app/models
+      - ai_video_cache:/app/cache
+      - ai_video_output:/app/output/lipsync
+      - ./config/lip-sync:/app/config:ro
+    networks:
+      - ai-video-network
+    depends_on:
+      - voice-tts
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # Scene Stitcher & Compositor
+  # ============================================================================
+  scene-stitcher:
+    build:
+      context: .
+      dockerfile: containers/scene-stitcher/Dockerfile
+    image: ai-video-gpu/scene-stitcher:latest
+    container_name: scene-stitcher
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1  # GPU for video processing acceleration
+              capabilities: [gpu]
+    environment:
+      # GPU Configuration (Optional for FFmpeg acceleration)
+      - NVIDIA_VISIBLE_DEVICES=4
+      - CUDA_VISIBLE_DEVICES=4
+      
+      # Service Configuration
+      - SERVICE_TYPE=scene_stitcher
+      - SERVICE_PORT=8004
+      - LOG_LEVEL=info
+      
+      # FFmpeg Configuration
+      - FFMPEG_HARDWARE_ACCEL=cuda
+      - FFMPEG_PRESET=ultrafast
+      - FFMPEG_CRF=18
+      
+      # Video Processing
+      - MAX_RESOLUTION=8192x4320  # 8K support
+      - ENABLE_HDR=true
+      - ENABLE_4K_UPSCALING=true
+      
+      # Professional Features
+      - ENABLE_COLOR_GRADING=true
+      - ENABLE_AUDIO_MIXING=true
+      - ENABLE_TRANSITIONS=true
+      - ENABLE_WATERMARKING=true
+      
+      # Export Formats
+      - EXPORT_FORMATS=mp4,mov,avi,mkv,webm
+      - CODEC_OPTIONS=h264,h265,vp9,av1
+    ports:
+      - "8004:8004"
+    volumes:
+      - ai_video_output:/app/input  # Input from other services
+      - ai_video_final:/app/output  # Final rendered videos
+      - ai_video_temp:/app/temp     # Temporary processing
+      - ./config/scene-stitcher:/app/config:ro
+      - ./templates:/app/templates:ro
+    networks:
+      - ai-video-network
+    depends_on:
+      - video-generator
+      - voice-tts
+      - lip-sync
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+
+  # ============================================================================
+  # Web Frontend Interface
+  # ============================================================================
+  frontend-ui:
+    build:
+      context: .
+      dockerfile: containers/frontend-ui/Dockerfile
+    image: ai-video-gpu/frontend-ui:latest
+    container_name: frontend-ui
+    restart: unless-stopped
+    environment:
+      # Frontend Configuration
+      - NODE_ENV=production
+      - PORT=3000
+      
+      # API Endpoints
+      - REACT_APP_API_BASE_URL=http://gpu-api-server:8000
+      - REACT_APP_VIDEO_API=http://video-generator:8001
+      - REACT_APP_VOICE_API=http://voice-tts:8002
+      - REACT_APP_LIPSYNC_API=http://lip-sync:8003
+      - REACT_APP_STITCHER_API=http://scene-stitcher:8004
+      
+      # WebSocket for Real-time Updates
+      - REACT_APP_WS_URL=ws://gpu-api-server:8000/ws
+      
+      # Features
+      - REACT_APP_ENABLE_LIVE_PREVIEW=true
+      - REACT_APP_ENABLE_PROGRESS_TRACKING=true
+      - REACT_APP_MAX_UPLOAD_SIZE=1GB
+      
+      # Hollywood/Bollywood UI Features
+      - REACT_APP_HOLLYWOOD_TEMPLATES=true
+      - REACT_APP_BOLLYWOOD_TEMPLATES=true
+      - REACT_APP_MULTI_LANGUAGE_UI=true
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app/src
+      - ai_video_uploads:/app/uploads
+    networks:
+      - ai-video-network
+    depends_on:
+      - gpu-api-server
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # GPU API Server & Orchestrator
+  # ============================================================================
+  gpu-api-server:
+    build:
+      context: .
+      dockerfile: containers/gpu-api-server/Dockerfile
+    image: ai-video-gpu/gpu-api-server:latest
+    container_name: gpu-api-server
+    restart: unless-stopped
+    environment:
+      # Service Configuration
+      - SERVICE_TYPE=api_server
+      - SERVICE_PORT=8000
+      - LOG_LEVEL=info
+      - WORKERS=4
+      
+      # Database & Cache
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/ai_video_gpu
+      - REDIS_URL=redis://redis:6379/0
+      
+      # Microservices URLs
+      - VIDEO_GENERATOR_URL=http://video-generator:8001
+      - VOICE_TTS_URL=http://voice-tts:8002
+      - LIP_SYNC_URL=http://lip-sync:8003
+      - SCENE_STITCHER_URL=http://scene-stitcher:8004
+      
+      # Authentication & Security
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-jwt-key}
+      - API_KEY=${API_KEY:-your-api-key}
+      - CORS_ORIGINS=http://localhost:3000,http://frontend-ui:3000
+      
+      # Cloud Storage (Optional)
+      - CLOUD_STORAGE_ENABLED=false
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - S3_BUCKET=${S3_BUCKET:-}
+      
+      # Professional Features
+      - ENABLE_LIVE_STREAMING=true
+      - ENABLE_ANALYTICS=true
+      - ENABLE_BLOCKCHAIN=false
+      - ENABLE_ENTERPRISE_FEATURES=true
+    ports:
+      - "8000:8000"
+      - "8765:8765"  # WebSocket port
+    volumes:
+      - ai_video_output:/app/output
+      - ai_video_uploads:/app/uploads
+      - ai_video_logs:/app/logs
+      - ./config/api-server:/app/config:ro
+    networks:
+      - ai-video-network
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================================
+  # Supporting Services
+  # ============================================================================
+  
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: ai-video-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=ai_video_gpu
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - ai-video-network
+
+  # Redis Cache & Message Broker
+  redis:
+    image: redis:7-alpine
+    container_name: ai-video-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai-video-network
+
+  # Nginx Load Balancer & Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: ai-video-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ai_video_final:/var/www/videos:ro
+    depends_on:
+      - frontend-ui
+      - gpu-api-server
+    networks:
+      - ai-video-network
+
+  # ============================================================================
+  # Monitoring & Management
+  # ============================================================================
+  
+  # Prometheus Metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ai-video-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - ai-video-network
+
+  # Grafana Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ai-video-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=aivideoadmin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - ai-video-network
+
+  # GPU Monitoring
+  nvidia-gpu-exporter:
+    image: utkuozdemir/nvidia_gpu_exporter:latest
+    container_name: ai-video-gpu-exporter
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - ai-video-network
+
+# ============================================================================
+# Volumes for Persistent Data
+# ============================================================================
+volumes:
+  # Model Storage (Shared across services)
+  ai_video_models:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /mnt/models  # High-speed SSD recommended
+  
+  # Cache Storage (Fast access)
+  ai_video_cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /mnt/cache
+  
+  # Service Output Storage
+  ai_video_output:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /mnt/output
+  
+  # Final Rendered Videos
+  ai_video_final:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /mnt/final
+  
+  # Upload Storage
+  ai_video_uploads:
+    driver: local
+  
+  # Temporary Processing
+  ai_video_temp:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=10g
+  
+  # Logs
+  ai_video_logs:
+    driver: local
+  
+  # Database
+  postgres_data:
+    driver: local
+  
+  # Cache
+  redis_data:
+    driver: local
+  
+  # Monitoring
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  ai-video-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+    driver_opts:
+      com.docker.network.bridge.name: ai-video-bridge

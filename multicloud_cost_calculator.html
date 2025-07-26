@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Cloud Cost Calculator - AI Video GPU</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #2196F3, #21CBF3);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+        }
+        .content {
+            padding: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #2196F3;
+        }
+        .calculate-btn {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            cursor: pointer;
+            width: 100%;
+            margin: 20px 0;
+            transition: transform 0.2s;
+        }
+        .calculate-btn:hover {
+            transform: translateY(-2px);
+        }
+        .results {
+            margin-top: 30px;
+            display: none;
+        }
+        .cloud-result {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            position: relative;
+        }
+        .cloud-result.cheapest {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+        .cloud-logo {
+            width: 40px;
+            height: 40px;
+            float: right;
+        }
+        .cost-amount {
+            font-size: 2em;
+            font-weight: bold;
+            color: #333;
+        }
+        .cheapest .cost-amount {
+            color: #28a745;
+        }
+        .savings {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .crown {
+            position: absolute;
+            top: -10px;
+            right: 20px;
+            font-size: 2em;
+        }
+        .recommendation {
+            background: #e3f2fd;
+            border-left: 5px solid #2196F3;
+            padding: 20px;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌐 Multi-Cloud Cost Calculator</h1>
+            <p>Compare Azure, AWS, and Google Cloud Platform costs for AI Video GPU</p>
+        </div>
+        
+        <div class="content">
+            <form id="costForm">
+                <div class="form-group">
+                    <label for="cpuCores">CPU Cores:</label>
+                    <input type="number" id="cpuCores" value="4" min="1" max="64">
+                </div>
+                
+                <div class="form-group">
+                    <label for="ramGb">RAM (GB):</label>
+                    <input type="number" id="ramGb" value="16" min="1" max="256">
+                </div>
+                
+                <div class="form-group">
+                    <label for="gpuType">GPU Type:</label>
+                    <select id="gpuType">
+                        <option value="tesla_t4">NVIDIA Tesla T4 (Recommended)</option>
+                        <option value="tesla_k80">NVIDIA Tesla K80 (Budget)</option>
+                        <option value="tesla_v100">NVIDIA Tesla V100 (Premium)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="storageGb">Storage (GB):</label>
+                    <input type="number" id="storageGb" value="500" min="10" max="10000">
+                </div>
+                
+                <div class="form-group">
+                    <label for="bandwidthGb">Monthly Bandwidth (GB):</label>
+                    <input type="number" id="bandwidthGb" value="1000" min="0" max="100000">
+                </div>
+                
+                <div class="form-group">
+                    <label for="hoursMonth">Hours per Month:</label>
+                    <input type="number" id="hoursMonth" value="730" min="1" max="744">
+                </div>
+                
+                <button type="button" class="calculate-btn" onclick="calculateCosts()">
+                    💰 Calculate Multi-Cloud Costs
+                </button>
+            </form>
+            
+            <div id="results" class="results">
+                <h2>💼 Cost Comparison Results</h2>
+                <div id="azureResult" class="cloud-result">
+                    <h3>🔵 Microsoft Azure</h3>
+                    <div class="cost-amount" id="azureCost">$0.00/month</div>
+                    <div id="azureSavings"></div>
+                </div>
+                
+                <div id="awsResult" class="cloud-result">
+                    <h3>🟡 Amazon AWS</h3>
+                    <div class="cost-amount" id="awsCost">$0.00/month</div>
+                    <div id="awsSavings"></div>
+                </div>
+                
+                <div id="gcpResult" class="cloud-result">
+                    <h3>🟢 Google Cloud Platform</h3>
+                    <div class="cost-amount" id="gcpCost">$0.00/month</div>
+                    <div id="gcpSavings"></div>
+                </div>
+                
+                <div class="recommendation">
+                    <h3>🎯 Our Recommendation</h3>
+                    <div id="recommendation"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const pricing = {
+            azure: {
+                cpu_per_core: 0.0464,
+                ram_per_gb: 0.0062,
+                gpu_tesla_t4: 0.526,
+                gpu_tesla_k80: 0.45,
+                gpu_tesla_v100: 2.48,
+                storage_per_gb: 0.000137,
+                bandwidth_per_gb: 0.087
+            },
+            aws: {
+                cpu_per_core: 0.0464,
+                ram_per_gb: 0.0058,
+                gpu_tesla_t4: 0.526,
+                gpu_tesla_k80: 0.45,
+                gpu_tesla_v100: 3.06,
+                storage_per_gb: 0.000115,
+                bandwidth_per_gb: 0.09
+            },
+            gcp: {
+                cpu_per_core: 0.0317,
+                ram_per_gb: 0.0042,
+                gpu_tesla_t4: 0.35,
+                gpu_tesla_k80: 0.45,
+                gpu_tesla_v100: 2.48,
+                storage_per_gb: 0.000192,
+                bandwidth_per_gb: 0.12
+            }
+        };
+
+        function calculateCloudCost(provider, cpuCores, ramGb, gpuType, storageGb, bandwidthGb, hours) {
+            const p = pricing[provider];
+            const cpuCost = cpuCores * p.cpu_per_core * hours;
+            const ramCost = ramGb * p.ram_per_gb * hours;
+            const gpuCost = p[`gpu_${gpuType}`] * hours;
+            const storageCost = storageGb * p.storage_per_gb * hours;
+            const bandwidthCost = bandwidthGb * p.bandwidth_per_gb;
+            
+            return cpuCost + ramCost + gpuCost + storageCost + bandwidthCost;
+        }
+
+        function calculateCosts() {
+            const cpuCores = parseInt(document.getElementById('cpuCores').value);
+            const ramGb = parseInt(document.getElementById('ramGb').value);
+            const gpuType = document.getElementById('gpuType').value;
+            const storageGb = parseInt(document.getElementById('storageGb').value);
+            const bandwidthGb = parseInt(document.getElementById('bandwidthGb').value);
+            const hoursMonth = parseInt(document.getElementById('hoursMonth').value);
+
+            const azureCost = calculateCloudCost('azure', cpuCores, ramGb, gpuType, storageGb, bandwidthGb, hoursMonth);
+            const awsCost = calculateCloudCost('aws', cpuCores, ramGb, gpuType, storageGb, bandwidthGb, hoursMonth);
+            const gcpCost = calculateCloudCost('gcp', cpuCores, ramGb, gpuType, storageGb, bandwidthGb, hoursMonth);
+
+            const costs = [
+                { name: 'azure', cost: azureCost, element: 'azureResult' },
+                { name: 'aws', cost: awsCost, element: 'awsResult' },
+                { name: 'gcp', cost: gcpCost, element: 'gcpResult' }
+            ];
+
+            const cheapest = costs.reduce((min, current) => current.cost < min.cost ? current : min);
+
+            // Clear previous results
+            document.querySelectorAll('.cloud-result').forEach(el => {
+                el.classList.remove('cheapest');
+                el.querySelector('.crown')?.remove();
+            });
+
+            // Update costs and highlight cheapest
+            document.getElementById('azureCost').textContent = `$${azureCost.toFixed(2)}/month`;
+            document.getElementById('awsCost').textContent = `$${awsCost.toFixed(2)}/month`;
+            document.getElementById('gcpCost').textContent = `$${gcpCost.toFixed(2)}/month`;
+
+            // Mark cheapest option
+            const cheapestElement = document.getElementById(cheapest.element);
+            cheapestElement.classList.add('cheapest');
+            cheapestElement.innerHTML = `<div class="crown">👑</div>` + cheapestElement.innerHTML;
+
+            // Calculate and show savings
+            costs.forEach(cloud => {
+                const savingsElement = document.getElementById(`${cloud.name}Savings`);
+                if (cloud.name === cheapest.name) {
+                    savingsElement.innerHTML = '<span class="savings">✅ CHEAPEST OPTION!</span>';
+                } else {
+                    const savings = ((cloud.cost - cheapest.cost) / cheapest.cost * 100).toFixed(1);
+                    const amount = (cloud.cost - cheapest.cost).toFixed(2);
+                    savingsElement.innerHTML = `<span style="color: #dc3545;">+${savings}% more expensive (+$${amount}/month)</span>`;
+                }
+            });
+
+            // Generate recommendation
+            let recommendation = '';
+            if (cheapest.name === 'gcp') {
+                recommendation = `🎯 <strong>Google Cloud Platform</strong> offers the best value for your configuration, especially for GPU-intensive workloads. Consider using GCP as your primary cloud for video processing while keeping Azure for web services.`;
+            } else if (cheapest.name === 'azure') {
+                recommendation = `🎯 <strong>Microsoft Azure</strong> provides the best cost-effectiveness for your setup. Since you already have Azure configured, this makes it the optimal choice for consistent deployment.`;
+            } else {
+                recommendation = `🎯 <strong>Amazon AWS</strong> offers the most competitive pricing for your requirements. Consider migrating your workloads to AWS for maximum cost savings.`;
+            }
+
+            recommendation += `<br><br>💡 <strong>Multi-Cloud Strategy:</strong> Use ${cheapest.name.toUpperCase()} for compute-intensive tasks, and distribute storage/CDN across providers for optimal cost and performance.`;
+
+            document.getElementById('recommendation').innerHTML = recommendation;
+
+            // Show results
+            document.getElementById('results').style.display = 'block';
+            document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Calculate on page load with default values
+        window.onload = () => calculateCosts();
+    </script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+Provider,Application_Date,Credit_Amount,Status,Approval_Date,Activation_Date,Expiry_Date,Monthly_Usage_Limit,Current_Usage,Remaining_Credits,Notes
+Oracle_Cloud_Always_Free,,,Pending,,,Never,Always_Free,0,Always_Free,No credit card required
+Google_Cloud_Free_Tier,,,Pending,,,90_days,$300,0,$300,$300 free credits for new users
+IBM_Cloud_Lite,,,Pending,,,Never,$200,0,$200,Always free services included
+DigitalOcean_Free_Tier,,,Pending,,,60_days,$200,0,$200,Free credits for new accounts
+AWS_Activate,,,Pending,,,24_months,$2000-10000,0,TBD,Startup program application
+Microsoft_Azure_Initial,2025-07-24,$1000,ACTIVE,2025-07-24,2025-07-24,2026-07-24,$1000,0,$1000,Initial Azure credits activated - verification complete
+Microsoft_Azure_Startups,,,Pending,,,24_months,$25000,0,TBD,Azure for Startups program - ready to apply
+Google_Cloud_Startups,,,Pending,,,12_months,$20000,0,TBD,Google for Startups program
+IBM_Cloud_Startups,,,Pending,,,12_months,$12000,0,TBD,IBM startup program
+NVIDIA_Cloud,,,Pending,,,12_months,$5000,0,TBD,GPU credits for AI development
+Lambda_Labs,,,Pending,,,12_months,$3000,0,TBD,GPU compute credits
+Paperspace,,,Pending,,,12_months,$2500,0,TBD,ML training platform credits
+Weights_and_Biases,,,Pending,,,12_months,$5000,0,TBD,MLOps platform credits
+Comet_ML,,,Pending,,,12_months,$2000,0,TBD,ML experiment tracking
+Neptune_AI,,,Pending,,,12_months,$3000,0,TBD,ML monitoring platform
+Gradient_Paperspace,,,Pending,,,12_months,$4500,0,TBD,ML platform credits
+DigitalOcean_Hatch,,,Pending,,,12_months,$15000,0,TBD,Startup program
+Vultr_Credits,,,Pending,,,12_months,$2500,0,TBD,Cloud compute credits
+Linode_Credits,,,Pending,,,12_months,$3000,0,TBD,Cloud infrastructure credits
+Microsoft_Founders_Hub,,,Pending,,,24_months,$120000,0,TBD,Enterprise startup program
+Techstars_Cloud_Credits,,,Pending,,,12_months,$100000,0,TBD,Accelerator program credits
+Google_Enterprise_Startups,,,Pending,,,24_months,$100000,0,TBD,Enterprise startup program
+AWS_InCubator,,,Pending,,,12_months,$25000,0,TBD,Incubator program
+NVIDIA_Inception,,,Pending,,,12_months,$15000,0,TBD,AI startup program

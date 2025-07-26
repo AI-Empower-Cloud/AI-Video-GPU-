@@ -1,0 +1,71 @@
+# Voice TTS Service Requirements
+# Hollywood-level voices with Indic-TTS, Bark, Tortoise, Coqui
+
+# Core PyTorch stack
+torch>=2.1.0
+torchvision>=0.16.0
+torchaudio>=2.1.0
+
+# Main TTS libraries
+bark>=1.0.0
+tortoise-tts>=2.4.2  
+TTS>=0.22.0  # Coqui TTS
+so-vits-svc>=4.1.1
+real-time-voice-cloning>=1.0.0
+
+# Indic TTS libraries
+indic-tts>=0.3.10
+indic-parler-tts>=0.1.0
+eval-tts>=0.1.0
+mms-tts>=1.0.0
+
+# Audio processing
+librosa>=0.10.0
+soundfile>=0.12.1
+scipy>=1.11.0
+numpy>=1.24.0
+
+# Speech synthesis
+espeak-ng>=1.51
+phonemizer>=3.2.1
+gruut>=2.2.3
+nltk>=3.8.1
+
+# Voice cloning and enhancement
+speechbrain>=0.5.14
+resemblyzer>=0.1.1
+pyworld>=0.3.2
+praat-parselmouth>=0.4.3
+
+# Audio effects and processing
+pyrubberband>=0.3.0
+pedalboard>=0.7.7
+pydub>=0.25.1
+noisereduce>=3.0.0
+
+# AI voice models
+transformers>=4.36.0
+accelerate>=0.25.0
+datasets>=2.14.0
+
+# Hollywood voice features
+fairseq>=0.12.2
+speechT5>=1.0.0
+valle-x>=1.0.0
+
+# API and networking
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+httpx==0.25.2
+requests==2.31.0
+
+# Utilities
+tqdm>=4.66.0
+psutil>=5.9.0
+pyyaml>=6.0.1
+python-multipart==0.0.6
+
+# Logging and monitoring
+python-json-logger==2.0.7
+prometheus-client==0.19.0

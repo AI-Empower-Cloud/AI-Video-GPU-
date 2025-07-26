@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure AI Video Platform - Cost Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            text-align: center;
+        }
+        
+        .header h1 {
+            color: #2c3e50;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #7f8c8d;
+            font-size: 1.2rem;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            transition: transform 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+        }
+        
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .metric-label {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .metric-value {
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        
+        .metric-value.green { color: #28a745; }
+        .metric-value.yellow { color: #ffc107; }
+        .metric-value.red { color: #dc3545; }
+        .metric-value.blue { color: #007bff; }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            transition: width 0.5s ease;
+            border-radius: 10px;
+        }
+        
+        .progress-fill.green { background: linear-gradient(90deg, #28a745, #20c997); }
+        .progress-fill.yellow { background: linear-gradient(90deg, #ffc107, #fd7e14); }
+        .progress-fill.red { background: linear-gradient(90deg, #dc3545, #e74c3c); }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin: 20px 0;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-online { background: #28a745; }
+        .status-warning { background: #ffc107; }
+        .status-offline { background: #dc3545; }
+        
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #28a745, #1e7e34);
+            color: white;
+        }
+        
+        .btn-warning {
+            background: linear-gradient(135deg, #ffc107, #e0a800);
+            color: #212529;
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545, #c82333);
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 500;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .alert-danger {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .recommendations {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        .recommendation-item {
+            display: flex;
+            align-items: start;
+            margin: 15px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .recommendation-icon {
+            font-size: 1.5rem;
+            margin-right: 15px;
+            margin-top: 2px;
+        }
+        
+        .vm-status {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .vm-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .vm-card.online {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+        
+        .vm-card.offline {
+            border-color: #dc3545;
+            background: #f8d7da;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Azure AI Video Platform</h1>
+            <p>Real-time Cost Monitoring & Resource Management Dashboard</p>
+            <div id="lastUpdated" style="margin-top: 10px; font-size: 0.9rem; color: #6c757d;"></div>
+        </div>
+        
+        <div class="dashboard-grid">
+            <!-- Budget Overview -->
+            <div class="card">
+                <h3>💰 Budget Overview</h3>
+                <div class="metric">
+                    <span class="metric-label">Total Credits</span>
+                    <span class="metric-value blue">$1,000.00</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Credits Used</span>
+                    <span class="metric-value yellow" id="creditsUsed">$0.00</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Credits Remaining</span>
+                    <span class="metric-value green" id="creditsRemaining">$1,000.00</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill green" id="budgetProgress" style="width: 0%"></div>
+                </div>
+                <div style="text-align: center; margin-top: 10px; font-size: 0.9rem;" id="budgetPercentage">0% of budget used</div>
+            </div>
+            
+            <!-- Daily Costs -->
+            <div class="card">
+                <h3>📊 Daily Spending</h3>
+                <div class="metric">
+                    <span class="metric-label">Today's Cost</span>
+                    <span class="metric-value blue" id="todayCost">$0.00</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Yesterday</span>
+                    <span class="metric-value" id="yesterdayCost">$0.00</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">7-Day Average</span>
+                    <span class="metric-value" id="weekAverage">$0.00</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Projected Monthly</span>
+                    <span class="metric-value yellow" id="monthlyProjection">$0.00</span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="dailyCostChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- VM Status -->
+            <div class="card">
+                <h3>🖥️ Virtual Machine Status</h3>
+                <div class="vm-status">
+                    <div class="vm-card" id="vmStatus">
+                        <div class="status-indicator status-offline" id="vmIndicator"></div>
+                        <div style="font-weight: bold; margin: 10px 0;" id="vmName">ai-video-gpu-vm</div>
+                        <div style="font-size: 0.9rem; color: #6c757d;" id="vmState">Checking...</div>
+                    </div>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">VM Size</span>
+                    <span class="metric-value blue">Standard_NC6</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">GPU</span>
+                    <span class="metric-value blue">Tesla K80</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Hourly Cost</span>
+                    <span class="metric-value yellow">~$0.90/hour</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Uptime Today</span>
+                    <span class="metric-value green" id="vmUptime">0 hours</span>
+                </div>
+                
+                <div class="action-buttons">
+                    <button class="btn btn-success" onclick="startVM()">Start VM</button>
+                    <button class="btn btn-warning" onclick="stopVM()">Stop VM</button>
+                    <button class="btn btn-primary" onclick="restartVM()">Restart VM</button>
+                </div>
+            </div>
+            
+            <!-- Storage Usage -->
+            <div class="card">
+                <h3>💾 Storage Usage</h3>
+                <div class="metric">
+                    <span class="metric-label">Videos Storage</span>
+                    <span class="metric-value blue" id="videoStorage">0 GB</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Models Storage</span>
+                    <span class="metric-value blue" id="modelStorage">0 GB</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Total Storage</span>
+                    <span class="metric-value yellow" id="totalStorage">0 GB</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Monthly Storage Cost</span>
+                    <span class="metric-value green" id="storageCost">$0.00</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill blue" id="storageProgress" style="width: 5%"></div>
+                </div>
+                <div style="text-align: center; margin-top: 10px; font-size: 0.9rem;">5% of 100GB limit used</div>
+                
+                <div class="action-buttons">
+                    <button class="btn btn-primary" onclick="cleanupStorage()">Cleanup Old Videos</button>
+                    <button class="btn btn-warning" onclick="viewStorage()">View Storage</button>
+                </div>
+            </div>
+            
+            <!-- Performance Metrics -->
+            <div class="card">
+                <h3>⚡ Performance Metrics</h3>
+                <div class="metric">
+                    <span class="metric-label">Videos Generated</span>
+                    <span class="metric-value green" id="videosGenerated">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Avg Generation Time</span>
+                    <span class="metric-value blue" id="avgGenerationTime">-- min</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Cost per Video</span>
+                    <span class="metric-value yellow" id="costPerVideo">$0.00</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">GPU Utilization</span>
+                    <span class="metric-value green" id="gpuUtilization">0%</span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="performanceChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Alerts & Notifications -->
+            <div class="card">
+                <h3>🔔 Alerts & Notifications</h3>
+                <div id="alertsContainer">
+                    <div class="alert alert-success">
+                        ✅ System is running optimally
+                    </div>
+                </div>
+                
+                <div style="margin-top: 20px;">
+                    <h4 style="margin-bottom: 10px;">Alert Thresholds</h4>
+                    <div class="metric">
+                        <span class="metric-label">Budget Warning</span>
+                        <span class="metric-value yellow">75% ($750)</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Budget Danger</span>
+                        <span class="metric-value red">90% ($900)</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Daily Limit</span>
+                        <span class="metric-value yellow">$50/day</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recommendations Section -->
+        <div class="recommendations">
+            <h3 style="margin-bottom: 20px; color: #2c3e50;">💡 Smart Recommendations</h3>
+            <div id="recommendationsContainer">
+                <div class="recommendation-item">
+                    <div class="recommendation-icon">🎯</div>
+                    <div>
+                        <strong>Welcome to Your Azure AI Video Platform!</strong><br>
+                        Your system is ready. Start by generating your first video to begin tracking performance metrics.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let dailyCostChart = null;
+        let performanceChart = null;
+        let totalCreditsUsed = 0;
+        let videosCount = 0;
+        let vmStatus = 'stopped';
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeDashboard();
+            setupCharts();
+            setupAutoRefresh();
+            updateLastUpdatedTime();
+        });
+        
+        function initializeDashboard() {
+            // Simulate loading some initial data
+            updateBudgetDisplay();
+            updateVMStatus();
+            updateStorageInfo();
+            updatePerformanceMetrics();
+            generateRecommendations();
+        }
+        
+        function setupCharts() {
+            // Daily Cost Chart
+            const dailyCostCtx = document.getElementById('dailyCostChart').getContext('2d');
+            const dailyCostData = generateMockDailyCosts();
+            
+            dailyCostChart = new Chart(dailyCostCtx, {
+                type: 'line',
+                data: {
+                    labels: dailyCostData.labels,
+                    datasets: [{
+                        label: 'Daily Cost ($)',
+                        data: dailyCostData.costs,
+                        borderColor: '#007bff',
+                        backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toFixed(2);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Performance Chart
+            const performanceCtx = document.getElementById('performanceChart').getContext('2d');
+            performanceChart = new Chart(performanceCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['GPU Usage', 'Idle Time'],
+                    datasets: [{
+                        data: [25, 75],
+                        backgroundColor: ['#28a745', '#e9ecef'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+        
+        function generateMockDailyCosts() {
+            const labels = [];
+            const costs = [];
+            const today = new Date();
+            
+            for (let i = 6; i >= 0; i--) {
+                const date = new Date(today);
+                date.setDate(date.getDate() - i);
+                labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+                
+                // Generate realistic costs based on usage patterns
+                if (i === 0) {
+                    costs.push(Math.random() * 25); // Today
+                } else if (i <= 2) {
+                    costs.push(Math.random() * 40 + 10); // Recent days
+                } else {
+                    costs.push(Math.random() * 15); // Older days
+                }
+            }
+            
+            return { labels, costs };
+        }
+        
+        function updateBudgetDisplay() {
+            const creditsUsed = calculateTotalCreditsUsed();
+            const creditsRemaining = 1000 - creditsUsed;
+            const percentage = (creditsUsed / 1000) * 100;
+            
+            document.getElementById('creditsUsed').textContent = `$${creditsUsed.toFixed(2)}`;
+            document.getElementById('creditsRemaining').textContent = `$${creditsRemaining.toFixed(2)}`;
+            document.getElementById('budgetProgress').style.width = `${percentage}%`;
+            document.getElementById('budgetPercentage').textContent = `${percentage.toFixed(1)}% of budget used`;
+            
+            // Update progress bar color based on usage
+            const progressBar = document.getElementById('budgetProgress');
+            if (percentage < 50) {
+                progressBar.className = 'progress-fill green';
+            } else if (percentage < 75) {
+                progressBar.className = 'progress-fill yellow';
+            } else {
+                progressBar.className = 'progress-fill red';
+            }
+            
+            // Update credits remaining color
+            const creditsRemainingElement = document.getElementById('creditsRemaining');
+            if (creditsRemaining > 500) {
+                creditsRemainingElement.className = 'metric-value green';
+            } else if (creditsRemaining > 200) {
+                creditsRemainingElement.className = 'metric-value yellow';
+            } else {
+                creditsRemainingElement.className = 'metric-value red';
+            }
+        }
+        
+        function calculateTotalCreditsUsed() {
+            // Simulate realistic credit usage based on actual Azure pricing
+            const baseUsage = Math.random() * 50; // Base platform costs
+            const vmUsage = vmStatus === 'running' ? Math.random() * 30 : 0; // VM costs when running
+            const storageUsage = Math.random() * 5; // Storage costs
+            
+            return baseUsage + vmUsage + storageUsage;
+        }
+        
+        function updateVMStatus() {
+            // Simulate VM status check
+            const states = ['running', 'stopped', 'starting', 'stopping'];
+            const weights = [0.3, 0.5, 0.1, 0.1]; // More likely to be stopped to save costs
+            
+            vmStatus = weightedRandom(states, weights);
+            
+            const vmCard = document.getElementById('vmStatus');
+            const vmIndicator = document.getElementById('vmIndicator');
+            const vmState = document.getElementById('vmState');
+            
+            switch(vmStatus) {
+                case 'running':
+                    vmCard.className = 'vm-card online';
+                    vmIndicator.className = 'status-indicator status-online';
+                    vmState.textContent = 'Running • Ready for video generation';
+                    document.getElementById('vmUptime').textContent = `${Math.floor(Math.random() * 8 + 1)} hours`;
+                    break;
+                case 'stopped':
+                    vmCard.className = 'vm-card offline';
+                    vmIndicator.className = 'status-indicator status-offline';
+                    vmState.textContent = 'Stopped • Saving costs';
+                    document.getElementById('vmUptime').textContent = '0 hours';
+                    break;
+                case 'starting':
+                    vmCard.className = 'vm-card';
+                    vmIndicator.className = 'status-indicator status-warning';
+                    vmState.textContent = 'Starting • Please wait...';
+                    break;
+                case 'stopping':
+                    vmCard.className = 'vm-card';
+                    vmIndicator.className = 'status-indicator status-warning';
+                    vmState.textContent = 'Stopping • Finalizing processes...';
+                    break;
+            }
+        }
+        
+        function updateStorageInfo() {
+            const videoStorage = Math.random() * 10 + 2;
+            const modelStorage = Math.random() * 5 + 1;
+            const totalStorage = videoStorage + modelStorage;
+            const storageCost = totalStorage * 0.02; // $0.02 per GB per month
+            
+            document.getElementById('videoStorage').textContent = `${videoStorage.toFixed(1)} GB`;
+            document.getElementById('modelStorage').textContent = `${modelStorage.toFixed(1)} GB`;
+            document.getElementById('totalStorage').textContent = `${totalStorage.toFixed(1)} GB`;
+            document.getElementById('storageCost').textContent = `$${storageCost.toFixed(2)}`;
+            
+            const storagePercentage = (totalStorage / 100) * 100;
+            document.getElementById('storageProgress').style.width = `${Math.min(storagePercentage, 100)}%`;
+        }
+        
+        function updatePerformanceMetrics() {
+            videosCount = Math.floor(Math.random() * 50);
+            const avgTime = Math.random() * 5 + 2;
+            const costPerVideo = totalCreditsUsed / Math.max(videosCount, 1);
+            const gpuUtil = vmStatus === 'running' ? Math.random() * 80 + 10 : 0;
+            
+            document.getElementById('videosGenerated').textContent = videosCount;
+            document.getElementById('avgGenerationTime').textContent = `${avgTime.toFixed(1)} min`;
+            document.getElementById('costPerVideo').textContent = `$${costPerVideo.toFixed(2)}`;
+            document.getElementById('gpuUtilization').textContent = `${gpuUtil.toFixed(0)}%`;
+            
+            // Update performance chart
+            if (performanceChart) {
+                performanceChart.data.datasets[0].data = [gpuUtil, 100 - gpuUtil];
+                performanceChart.update('none');
+            }
+        }
+        
+        function generateRecommendations() {
+            const recommendations = [];
+            const creditsUsed = calculateTotalCreditsUsed();
+            const percentage = (creditsUsed / 1000) * 100;
+            
+            if (vmStatus === 'running' && Math.random() > 0.7) {
+                recommendations.push({
+                    icon: '⚠️',
+                    title: 'VM Running - Consider Stopping',
+                    text: 'Your VM has been running for a while. Stop it when not in use to save ~$0.90/hour.'
+                });
+            }
+            
+            if (percentage > 75) {
+                recommendations.push({
+                    icon: '💰',
+                    title: 'Budget Alert',
+                    text: 'You\'ve used over 75% of your credits. Consider optimizing usage or preparing your $25,000 application.'
+                });
+            }
+            
+            if (videosCount > 20) {
+                recommendations.push({
+                    icon: '🎉',
+                    title: 'Great Progress!',
+                    text: `You've generated ${videosCount} videos! Perfect data for your Azure for Startups application.`
+                });
+            }
+            
+            if (Math.random() > 0.5) {
+                recommendations.push({
+                    icon: '📊',
+                    title: 'Cost Optimization',
+                    text: 'Use batch processing to generate multiple videos in one session for better cost efficiency.'
+                });
+            }
+            
+            // Always show at least one recommendation
+            if (recommendations.length === 0) {
+                recommendations.push({
+                    icon: '🚀',
+                    title: 'System Optimized',
+                    text: 'Your Azure AI Video Platform is running efficiently. Keep monitoring costs daily!'
+                });
+            }
+            
+            const container = document.getElementById('recommendationsContainer');
+            container.innerHTML = recommendations.map(rec => `
+                <div class="recommendation-item">
+                    <div class="recommendation-icon">${rec.icon}</div>
+                    <div>
+                        <strong>${rec.title}</strong><br>
+                        ${rec.text}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function setupAutoRefresh() {
+            // Refresh data every 30 seconds
+            setInterval(() => {
+                updateBudgetDisplay();
+                updateVMStatus();
+                updateStorageInfo();
+                updatePerformanceMetrics();
+                generateRecommendations();
+                updateAlerts();
+                updateLastUpdatedTime();
+            }, 30000);
+        }
+        
+        function updateAlerts() {
+            const alerts = [];
+            const creditsUsed = calculateTotalCreditsUsed();
+            const percentage = (creditsUsed / 1000) * 100;
+            
+            if (percentage > 90) {
+                alerts.push({
+                    type: 'danger',
+                    message: '🚨 Critical: Over 90% of credits used! Consider stopping non-essential services.'
+                });
+            } else if (percentage > 75) {
+                alerts.push({
+                    type: 'warning',
+                    message: '⚠️ Warning: Over 75% of credits used. Monitor usage closely.'
+                });
+            }
+            
+            if (vmStatus === 'running') {
+                alerts.push({
+                    type: 'warning',
+                    message: '💻 VM is currently running. Remember to stop it when not in use to save costs.'
+                });
+            }
+            
+            if (alerts.length === 0) {
+                alerts.push({
+                    type: 'success',
+                    message: '✅ All systems optimal. Great job managing your Azure credits!'
+                });
+            }
+            
+            const container = document.getElementById('alertsContainer');
+            container.innerHTML = alerts.map(alert => `
+                <div class="alert alert-${alert.type}">
+                    ${alert.message}
+                </div>
+            `).join('');
+        }
+        
+        function updateLastUpdatedTime() {
+            const now = new Date();
+            document.getElementById('lastUpdated').textContent = 
+                `Last updated: ${now.toLocaleString()}`;
+        }
+        
+        // VM Control Functions
+        function startVM() {
+            if (confirm('Start the AI Video GPU VM? This will begin charging ~$0.90/hour.')) {
+                vmStatus = 'starting';
+                updateVMStatus();
+                showNotification('Starting VM...', 'info');
+                
+                setTimeout(() => {
+                    vmStatus = 'running';
+                    updateVMStatus();
+                    updateBudgetDisplay();
+                    showNotification('VM started successfully!', 'success');
+                }, 3000);
+            }
+        }
+        
+        function stopVM() {
+            if (confirm('Stop the AI Video GPU VM? This will save costs but stop video generation.')) {
+                vmStatus = 'stopping';
+                updateVMStatus();
+                showNotification('Stopping VM...', 'info');
+                
+                setTimeout(() => {
+                    vmStatus = 'stopped';
+                    updateVMStatus();
+                    updateBudgetDisplay();
+                    showNotification('VM stopped successfully!', 'success');
+                }, 3000);
+            }
+        }
+        
+        function restartVM() {
+            if (confirm('Restart the AI Video GPU VM? This may take a few minutes.')) {
+                vmStatus = 'stopping';
+                updateVMStatus();
+                showNotification('Restarting VM...', 'info');
+                
+                setTimeout(() => {
+                    vmStatus = 'starting';
+                    updateVMStatus();
+                    
+                    setTimeout(() => {
+                        vmStatus = 'running';
+                        updateVMStatus();
+                        showNotification('VM restarted successfully!', 'success');
+                    }, 3000);
+                }, 2000);
+            }
+        }
+        
+        function cleanupStorage() {
+            if (confirm('Delete old videos and temporary files to save storage costs?')) {
+                showNotification('Cleaning up storage...', 'info');
+                
+                setTimeout(() => {
+                    updateStorageInfo();
+                    showNotification('Storage cleanup completed!', 'success');
+                }, 2000);
+            }
+        }
+        
+        function viewStorage() {
+            alert('Opening Azure Storage Explorer...\n\nThis would typically open the Azure portal or storage management interface.');
+        }
+        
+        // Utility Functions
+        function weightedRandom(items, weights) {
+            const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+            let random = Math.random() * totalWeight;
+            
+            for (let i = 0; i < items.length; i++) {
+                if (random < weights[i]) {
+                    return items[i];
+                }
+                random -= weights[i];
+            }
+            
+            return items[items.length - 1];
+        }
+        
+        function showNotification(message, type) {
+            const alertTypes = {
+                'success': 'alert-success',
+                'warning': 'alert-warning',
+                'danger': 'alert-danger',
+                'info': 'alert-warning'
+            };
+            
+            const alertHtml = `<div class="alert ${alertTypes[type]}">${message}</div>`;
+            const container = document.getElementById('alertsContainer');
+            container.innerHTML = alertHtml + container.innerHTML;
+            
+            // Remove notification after 5 seconds
+            setTimeout(() => {
+                const alerts = container.querySelectorAll('.alert');
+                if (alerts.length > 3) {
+                    alerts[alerts.length - 1].remove();
+                }
+            }, 5000);
+        }
+        
+        // Initialize everything when page loads
+        updateLastUpdatedTime();
+        
+        // Add keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key) {
+                    case 'r':
+                        e.preventDefault();
+                        location.reload();
+                        break;
+                    case 's':
+                        e.preventDefault();
+                        if (vmStatus === 'running') {
+                            stopVM();
+                        } else {
+                            startVM();
+                        }
+                        break;
+                }
+            }
+        });
+    </script>
+</body>
+</html>

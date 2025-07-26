@@ -62,3 +62,7 @@ build/
 
 # Large binary files
 *.node
+# GCP Credentials (keep secure)
+credentials/*.json
+gcp-service-account.json
+*.json

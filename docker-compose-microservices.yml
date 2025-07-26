@@ -1,0 +1,241 @@
+# AI Video GPU - Microservices Docker Compose Configuration
+# Complete containerized deployment with microservices architecture
+
+version: '3.8'
+
+services:
+  # Redis for job queue and caching
+  redis:
+    image: redis:7-alpine
+    container_name: ai-video-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    networks:
+      - ai-video-network
+
+  # Video Generator Microservice
+  video-generator:
+    build:
+      context: .
+      dockerfile: docker/video-generator/Dockerfile
+    container_name: ai-video-generator
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./outputs:/app/outputs
+      - ./temp:/app/temp
+      - ./models:/app/models
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - ai-video-network
+
+  # Voice/TTS Microservice
+  voice-tts:
+    build:
+      context: .
+      dockerfile: docker/voice-tts/Dockerfile
+    container_name: ai-video-voice-tts
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./outputs:/app/outputs
+      - ./temp:/app/temp
+      - ./models:/app/models
+    environment:
+      - CUDA_VISIBLE_DEVICES=1
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - ai-video-network
+
+  # Lip Sync Microservice
+  lip-sync:
+    build:
+      context: .
+      dockerfile: docker/lip-sync/Dockerfile
+    container_name: ai-video-lip-sync
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./outputs:/app/outputs
+      - ./temp:/app/temp
+      - ./models:/app/models
+    environment:
+      - CUDA_VISIBLE_DEVICES=2
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - ai-video-network
+
+  # Scene Stitcher Microservice
+  scene-stitcher:
+    build:
+      context: .
+      dockerfile: docker/scene-stitcher/Dockerfile
+    container_name: ai-video-scene-stitcher
+    ports:
+      - "8004:8004"
+    volumes:
+      - ./outputs:/app/outputs
+      - ./temp:/app/temp
+    environment:
+      - CUDA_VISIBLE_DEVICES=3
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - ai-video-network
+
+  # Web UI Frontend
+  web-ui:
+    build:
+      context: .
+      dockerfile: docker/web-ui/Dockerfile
+    container_name: ai-video-web-ui
+    ports:
+      - "8005:8005"
+    volumes:
+      - ./outputs:/app/outputs:ro
+    depends_on:
+      - api-backend
+    restart: unless-stopped
+    networks:
+      - ai-video-network
+
+  # API Backend
+  api-backend:
+    build:
+      context: .
+      dockerfile: docker/api-backend/Dockerfile
+    container_name: ai-video-api-backend
+    ports:
+      - "8006:8006"
+    volumes:
+      - ./outputs:/app/outputs
+      - ./temp:/app/temp
+      - ./uploads:/app/uploads
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - video-generator
+      - voice-tts
+      - lip-sync
+      - scene-stitcher
+    restart: unless-stopped
+    networks:
+      - ai-video-network
+
+  # Nginx Load Balancer/Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: ai-video-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - ./outputs:/var/www/outputs:ro
+    depends_on:
+      - web-ui
+      - api-backend
+    restart: unless-stopped
+    networks:
+      - ai-video-network
+
+  # Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ai-video-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - ai-video-network
+
+  # Grafana for Monitoring Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ai-video-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - ai-video-network
+
+volumes:
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  ai-video-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
